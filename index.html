@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Video Player - HLS/DASH Testing Tool</title>
+    
+    <!-- Video.js CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.5.2/video-js.css" rel="stylesheet">
+    
+    <!-- Custom Styling -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #0078d4, #005a9e);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255,255,255,0.05) 10px,
+                rgba(255,255,255,0.05) 20px
+            );
+            animation: shimmer 20s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        }
+
+        .header h1 {
+            position: relative;
+            z-index: 2;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            position: relative;
+            z-index: 2;
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .input-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid #e9ecef;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            align-items: end;
+            flex-wrap: wrap;
+        }
+
+        .input-field {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .input-field label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .input-field input, .input-field select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .input-field input:focus, .input-field select:focus {
+            outline: none;
+            border-color: #0078d4;
+            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #0078d4, #005a9e);
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 120, 212, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 120, 212, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-1px);
+        }
+
+        .video-section {
+            margin-bottom: 30px;
+        }
+
+        .video-js {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .stats-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .stats-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+            transition: transform 0.3s ease;
+        }
+
+        .stats-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .stats-card h3 {
+            color: #0078d4;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .stat-value {
+            color: #0078d4;
+            font-weight: 500;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 1px solid #c3e6cb;
+        }
+
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .btn-preset {
+            padding: 8px 16px;
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-preset:hover {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+        }
+
+        .logs-section {
+            background: #212529;
+            color: #28a745;
+            border-radius: 15px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .log-timestamp {
+            color: #6c757d;
+        }
+
+        .log-error {
+            color: #dc3545;
+        }
+
+        .log-info {
+            color: #17a2b8;
+        }
+
+        .log-success {
+            color: #28a745;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .input-group {
+                flex-direction: column;
+            }
+            
+            .input-field {
+                min-width: auto;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Azure Video Player</h1>
+            <p>Professional HLS & DASH Streaming Test Tool</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="input-section">
+                <div class="input-group">
+                    <div class="input-field">
+                        <label for="streamUrl">Stream URL (.m3u8 or .mpd)</label>
+                        <input type="url" id="streamUrl" placeholder="https://your-domain.com/stream.m3u8" />
+                    </div>
+                    <div class="input-field">
+                        <label for="streamType">Stream Type</label>
+                        <select id="streamType">
+                            <option value="auto">Auto Detect</option>
+                            <option value="hls">HLS (.m3u8)</option>
+                            <option value="dash">DASH (.mpd)</option>
+                        </select>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="loadStream()">Load Stream</button>
+                        <button class="btn btn-secondary" onclick="clearLogs()">Clear Logs</button>
+                    </div>
+                </div>
+                
+                <div class="preset-buttons">
+                    <button class="btn-preset" onclick="loadPreset('hls-demo')">HLS Demo</button>
+                    <button class="btn-preset" onclick="loadPreset('dash-demo')">DASH Demo</button>
+                    <button class="btn-preset" onclick="loadPreset('apple-demo')">Apple Demo</button>
+                </div>
+                
+                <div id="messageArea"></div>
+            </div>
+            
+            <div class="video-section">
+                <video
+                    id="videoPlayer"
+                    class="video-js vjs-default-skin"
+                    controls
+                    preload="auto"
+                    width="100%"
+                    height="500"
+                    data-setup="{}">
+                    <p class="vjs-no-js">
+                        To view this video please enable JavaScript, and consider upgrading to a web browser that
+                        <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>.
+                    </p>
+                </video>
+            </div>
+            
+            <div class="stats-section">
+                <div class="stats-card">
+                    <h3>📊 Stream Information</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">Stream Type:</span>
+                            <span class="stat-value" id="currentStreamType">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Current Quality:</span>
+                            <span class="stat-value" id="currentQuality">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Buffer Health:</span>
+                            <span class="stat-value" id="bufferHealth">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Playback Rate:</span>
+                            <span class="stat-value" id="playbackRate">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stats-card">
+                    <h3>🔧 Player Status</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">Player State:</span>
+                            <span class="stat-value" id="playerState">Idle</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Network State:</span>
+                            <span class="stat-value" id="networkState">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Error Count:</span>
+                            <span class="stat-value" id="errorCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Tech Used:</span>
+                            <span class="stat-value" id="techUsed">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="stats-card">
+                <h3>📝 Event Logs</h3>
+                <div id="logsSection" class="logs-section">
+                    <div class="log-entry log-info">
+                        <span class="log-timestamp">[Ready]</span> Azure Video Player initialized successfully
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video.js JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.5.2/video.min.js"></script>
+    <!-- HLS.js for HLS support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+    <!-- DASH.js for DASH support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dashjs/4.7.2/dash.all.min.js"></script>
+
+    <script>
+        let player;
+        let hlsInstance;
+        let dashInstance;
+        let errorCount = 0;
+        let statusUpdateInterval;
+
+        // Initialize Video.js player
+        document.addEventListener('DOMContentLoaded', function() {
+            initializePlayer();
+            startStatusUpdates();
+        });
+
+        function initializePlayer() {
+            const options = {
+                responsive: true,
+                fluid: false,
+                playbackRates: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
+                controls: true,
+                preload: 'auto',
+                html5: {
+                    vhs: {
+                        enableLowInitialPlaylist: true,
+                        smoothQualityChange: true,
+                        overrideNative: true
+                    }
+                }
+            };
+
+            player = videojs('videoPlayer', options);
+            
+            // Add event listeners
+            player.on('loadstart', () => logEvent('info', 'Stream loading started'));
+            player.on('loadedmetadata', () => logEvent('success', 'Stream metadata loaded'));
+            player.on('canplay', () => logEvent('success', 'Stream ready to play'));
+            player.on('playing', () => logEvent('success', 'Playback started'));
+            player.on('pause', () => logEvent('info', 'Playback paused'));
+            player.on('ended', () => logEvent('info', 'Playback ended'));
+            player.on('waiting', () => logEvent('info', 'Buffering...'));
+            player.on('error', (e) => {
+                errorCount++;
+                logEvent('error', `Player error: ${player.error()?.message || 'Unknown error'}`);
+                updateStats();
+            });
+
+            logEvent('success', 'Video.js player initialized');
+        }
+
+        function loadStream() {
+            const url = document.getElementById('streamUrl').value.trim();
+            const streamType = document.getElementById('streamType').value;
+            
+            if (!url) {
+                showMessage('Please enter a stream URL', 'error');
+                return;
+            }
+
+            clearMessage();
+            logEvent('info', `Loading stream: ${url}`);
+            logEvent('info', `Stream type: ${streamType}`);
+
+            // Reset error count
+            errorCount = 0;
+            
+            // Dispose of existing instances
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+            if (dashInstance) {
+                dashInstance.reset();
+                dashInstance = null;
+            }
+
+            // Auto-detect stream type if needed
+            let detectedType = streamType;
+            if (streamType === 'auto') {
+                if (url.includes('.m3u8')) {
+                    detectedType = 'hls';
+                } else if (url.includes('.mpd')) {
+                    detectedType = 'dash';
+                } else {
+                    detectedType = 'hls'; // default assumption
+                }
+            }
+
+            if (detectedType === 'hls') {
+                loadHLSStream(url);
+            } else if (detectedType === 'dash') {
+                loadDASHStream(url);
+            }
+
+            document.getElementById('currentStreamType').textContent = detectedType.toUpperCase();
+            updateStats();
+        }
+
+        function loadHLSStream(url) {
+            if (Hls.isSupported()) {
+                hlsInstance = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 90
+                });
+                
+                hlsInstance.loadSource(url);
+                hlsInstance.attachMedia(player.tech().el());
+                
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+                    logEvent('success', 'HLS manifest parsed successfully');
+                    showMessage('HLS stream loaded successfully!', 'success');
+                });
+                
+                hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+                    errorCount++;
+                    logEvent('error', `HLS Error: ${data.type} - ${data.details}`);
+                    if (data.fatal) {
+                        showMessage(`Fatal HLS error: ${data.details}`, 'error');
+                    }
+                });
+
+                hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+                    logEvent('info', `Quality switched to level ${data.level}`);
+                });
+
+                logEvent('success', 'HLS.js instance created and attached');
+            } else if (player.tech().el().canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari)
+                player.src({
+                    src: url,
+                    type: 'application/vnd.apple.mpegurl'
+                });
+                logEvent('success', 'Using native HLS support');
+                showMessage('Stream loaded with native HLS support!', 'success');
+            } else {
+                showMessage('HLS is not supported in this browser', 'error');
+                logEvent('error', 'HLS not supported');
+            }
+        }
+
+        function loadDASHStream(url) {
+            if (typeof dashjs !== 'undefined') {
+                dashInstance = dashjs.MediaPlayer().create();
+                dashInstance.initialize(player.tech().el(), url, false);
+                
+                dashInstance.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {
+                    logEvent('success', 'DASH stream initialized');
+                    showMessage('DASH stream loaded successfully!', 'success');
+                });
+                
+                dashInstance.on(dashjs.MediaPlayer.events.ERROR, function(e) {
+                    errorCount++;
+                    logEvent('error', `DASH Error: ${e.error}`);
+                    showMessage(`DASH error: ${e.error}`, 'error');
+                });
+
+                logEvent('success', 'DASH.js instance created and attached');
+            } else {
+                showMessage('DASH.js not available', 'error');
+                logEvent('error', 'DASH.js not loaded');
+            }
+        }
+
+        function loadPreset(preset) {
+            const presets = {
+                'hls-demo': {
+                    url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+                    type: 'hls'
+                },
+                'dash-demo': {
+                    url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.mpd',
+                    type: 'dash'
+                },
+                'apple-demo': {
+                    url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8',
+                    type: 'hls'
+                }
+            };
+
+            if (presets[preset]) {
+                document.getElementById('streamUrl').value = presets[preset].url;
+                document.getElementById('streamType').value = presets[preset].type;
+                logEvent('info', `Loaded ${preset} preset`);
+            }
+        }
+
+        function startStatusUpdates() {
+            statusUpdateInterval = setInterval(updateStats, 1000);
+        }
+
+        function updateStats() {
+            if (!player) return;
+
+            // Update player state
+            const states = ['idle', 'loading', 'loaded', 'ready', 'playing', 'paused', 'ended'];
+            let currentState = 'unknown';
+            
+            if (player.ended()) currentState = 'ended';
+            else if (player.paused()) currentState = 'paused';
+            else if (!player.paused() && player.currentTime() > 0) currentState = 'playing';
+            else if (player.readyState() >= 3) currentState = 'ready';
+            else if (player.readyState() >= 2) currentState = 'loaded';
+            else if (player.readyState() >= 1) currentState = 'loading';
+            else currentState = 'idle';
+
+            document.getElementById('playerState').textContent = currentState;
+            document.getElementById('errorCount').textContent = errorCount;
+            document.getElementById('playbackRate').textContent = player.playbackRate() + 'x';
+            
+            // Network state
+            const networkStates = ['empty', 'idle', 'loading', 'no-source'];
+            document.getElementById('networkState').textContent = networkStates[player.networkState()] || 'unknown';
+            
+            // Tech used
+            document.getElementById('techUsed').textContent = player.tech().name_ || '-';
+            
+            // Buffer health
+            try {
+                const buffered = player.buffered();
+                const currentTime = player.currentTime();
+                let bufferAhead = 0;
+                
+                for (let i = 0; i < buffered.length; i++) {
+                    if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+                        bufferAhead = buffered.end(i) - currentTime;
+                        break;
+                    }
+                }
+                
+                document.getElementById('bufferHealth').textContent = Math.round(bufferAhead) + 's';
+            } catch (e) {
+                document.getElementById('bufferHealth').textContent = '-';
+            }
+            
+            // Current quality (HLS specific)
+            if (hlsInstance && hlsInstance.currentLevel >= 0) {
+                const level = hlsInstance.levels[hlsInstance.currentLevel];
+                if (level) {
+                    document.getElementById('currentQuality').textContent = 
+                        `${level.width}x${level.height} @ ${Math.round(level.bitrate/1000)}kbps`;
+                }
+            } else {
+                document.getElementById('currentQuality').textContent = '-';
+            }
+        }
+
+        function logEvent(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logsSection = document.getElementById('logsSection');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> ${message}`;
+            
+            logsSection.appendChild(logEntry);
+            logsSection.scrollTop = logsSection.scrollHeight;
+            
+            // Keep only last 100 log entries
+            const logEntries = logsSection.getElementsByClassName('log-entry');
+            if (logEntries.length > 100) {
+                logsSection.removeChild(logEntries[0]);
+            }
+        }
+
+        function clearLogs() {
+            const logsSection = document.getElementById('logsSection');
+            logsSection.innerHTML = '<div class="log-entry log-info"><span class="log-timestamp">[Cleared]</span> Logs cleared</div>';
+        }
+
+        function showMessage(message, type) {
+            const messageArea = document.getElementById('messageArea');
+            messageArea.innerHTML = `<div class="${type}-message">${message}</div>`;
+        }
+
+        function clearMessage() {
+            document.getElementById('messageArea').innerHTML = '';
+        }
+
+        // Handle page unload
+        window.addEventListener('beforeunload', function() {
+            if (statusUpdateInterval) {
+                clearInterval(statusUpdateInterval);
+            }
+            if (hlsInstance) {
+                hlsInstance.destroy();
+            }
+            if (dashInstance) {
+                dashInstance.reset();
+            }
+            if (player) {
+                player.dispose();
+            }
+        });
+    </script>
+</body>
+</html>
