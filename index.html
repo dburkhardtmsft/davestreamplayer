@@ -465,46 +465,79 @@
         let errorCount = 0;
         let statusUpdateInterval;
 
+        // Wait for all scripts to load before initializing
+        let scriptsLoaded = 0;
+        const totalScripts = 3; // videojs, hls.js, dash.js
+
+        function checkScriptsLoaded() {
+            scriptsLoaded++;
+            if (scriptsLoaded >= totalScripts) {
+                initializePlayer();
+                startStatusUpdates();
+            }
+        }
+
         // Initialize Video.js player
         document.addEventListener('DOMContentLoaded', function() {
-            initializePlayer();
-            startStatusUpdates();
+            // Check if libraries are loaded
+            if (typeof videojs !== 'undefined') checkScriptsLoaded();
+            if (typeof Hls !== 'undefined') checkScriptsLoaded();
+            if (typeof dashjs !== 'undefined') checkScriptsLoaded();
+            
+            // Fallback timer in case some scripts don't load
+            setTimeout(() => {
+                if (!player) {
+                    logEvent('info', 'Initializing player with available libraries...');
+                    initializePlayer();
+                    startStatusUpdates();
+                }
+            }, 2000);
         });
 
         function initializePlayer() {
-            const options = {
-                responsive: true,
-                fluid: false,
-                aspectRatio: '16:9',
-                playbackRates: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
-                controls: true,
-                preload: 'auto',
-                html5: {
-                    vhs: {
-                        enableLowInitialPlaylist: true,
-                        smoothQualityChange: true,
-                        overrideNative: true
+            try {
+                const options = {
+                    responsive: true,
+                    fluid: false,
+                    aspectRatio: '16:9',
+                    playbackRates: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
+                    controls: true,
+                    preload: 'auto',
+                    html5: {
+                        vhs: {
+                            enableLowInitialPlaylist: true,
+                            smoothQualityChange: true,
+                            overrideNative: !videojs.browser.IS_SAFARI
+                        }
                     }
-                }
-            };
+                };
 
-            player = videojs('videoPlayer', options);
-            
-            // Add event listeners
-            player.on('loadstart', () => logEvent('info', 'Stream loading started'));
-            player.on('loadedmetadata', () => logEvent('success', 'Stream metadata loaded'));
-            player.on('canplay', () => logEvent('success', 'Stream ready to play'));
-            player.on('playing', () => logEvent('success', 'Playback started'));
-            player.on('pause', () => logEvent('info', 'Playback paused'));
-            player.on('ended', () => logEvent('info', 'Playback ended'));
-            player.on('waiting', () => logEvent('info', 'Buffering...'));
-            player.on('error', (e) => {
-                errorCount++;
-                logEvent('error', `Player error: ${player.error()?.message || 'Unknown error'}`);
-                updateStats();
-            });
+                player = videojs('videoPlayer', options);
+                
+                // Wait for player ready state
+                player.ready(() => {
+                    logEvent('success', 'Video.js player ready');
+                    
+                    // Add event listeners
+                    player.on('loadstart', () => logEvent('info', 'Stream loading started'));
+                    player.on('loadedmetadata', () => logEvent('success', 'Stream metadata loaded'));
+                    player.on('canplay', () => logEvent('success', 'Stream ready to play'));
+                    player.on('playing', () => logEvent('success', 'Playback started'));
+                    player.on('pause', () => logEvent('info', 'Playback paused'));
+                    player.on('ended', () => logEvent('info', 'Playback ended'));
+                    player.on('waiting', () => logEvent('info', 'Buffering...'));
+                    player.on('error', (e) => {
+                        errorCount++;
+                        const error = player.error();
+                        logEvent('error', `Player error: ${error?.message || error?.code || 'Unknown error'}`);
+                        updateStats();
+                    });
+                });
 
-            logEvent('success', 'Video.js player initialized');
+                logEvent('success', 'Video.js player initialized');
+            } catch (error) {
+                logEvent('error', `Failed to initialize player: ${error.message}`);
+            }
         }
 
         function loadStream() {
@@ -516,6 +549,11 @@
                 return;
             }
 
+            if (!player) {
+                showMessage('Player not initialized yet', 'error');
+                return;
+            }
+
             clearMessage();
             logEvent('info', `Loading stream: ${url}`);
             logEvent('info', `Stream type: ${streamType}`);
@@ -524,14 +562,7 @@
             errorCount = 0;
             
             // Dispose of existing instances
-            if (hlsInstance) {
-                hlsInstance.destroy();
-                hlsInstance = null;
-            }
-            if (dashInstance) {
-                dashInstance.reset();
-                dashInstance = null;
-            }
+            cleanupInstances();
 
             // Auto-detect stream type if needed
             let detectedType = streamType;
@@ -555,44 +586,92 @@
             updateStats();
         }
 
+        function cleanupInstances() {
+            if (hlsInstance) {
+                try {
+                    hlsInstance.destroy();
+                } catch (e) {
+                    logEvent('info', 'HLS instance cleanup completed');
+                }
+                hlsInstance = null;
+            }
+            if (dashInstance) {
+                try {
+                    dashInstance.reset();
+                } catch (e) {
+                    logEvent('info', 'DASH instance cleanup completed');
+                }
+                dashInstance = null;
+            }
+        }
+
         function loadHLSStream(url) {
-            if (Hls.isSupported()) {
-                hlsInstance = new Hls({
-                    debug: false,
-                    enableWorker: true,
-                    lowLatencyMode: true,
-                    backBufferLength: 90
-                });
-                
-                hlsInstance.loadSource(url);
-                hlsInstance.attachMedia(player.tech().el());
-                
-                hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
-                    logEvent('success', 'HLS manifest parsed successfully');
-                    showMessage('HLS stream loaded successfully!', 'success');
-                });
-                
-                hlsInstance.on(Hls.Events.ERROR, function(event, data) {
-                    errorCount++;
-                    logEvent('error', `HLS Error: ${data.type} - ${data.details}`);
-                    if (data.fatal) {
-                        showMessage(`Fatal HLS error: ${data.details}`, 'error');
-                    }
-                });
-
-                hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
-                    logEvent('info', `Quality switched to level ${data.level}`);
-                });
-
-                logEvent('success', 'HLS.js instance created and attached');
-            } else if (player.tech().el().canPlayType('application/vnd.apple.mpegurl')) {
-                // Native HLS support (Safari)
+            const videoElement = player.tech().el();
+            
+            // Check for native HLS support first (Safari)
+            if (videoElement.canPlayType('application/vnd.apple.mpegurl') && !window.Hls) {
                 player.src({
                     src: url,
                     type: 'application/vnd.apple.mpegurl'
                 });
                 logEvent('success', 'Using native HLS support');
                 showMessage('Stream loaded with native HLS support!', 'success');
+                return;
+            }
+            
+            // Use HLS.js for other browsers
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                try {
+                    hlsInstance = new Hls({
+                        debug: false,
+                        enableWorker: true,
+                        lowLatencyMode: false,
+                        backBufferLength: 90,
+                        maxBufferLength: 30,
+                        maxMaxBufferLength: 600,
+                        startLevel: -1,
+                        autoStartLoad: true,
+                        capLevelToPlayerSize: true
+                    });
+                    
+                    hlsInstance.loadSource(url);
+                    hlsInstance.attachMedia(videoElement);
+                    
+                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+                        logEvent('success', 'HLS manifest parsed successfully');
+                        showMessage('HLS stream loaded successfully!', 'success');
+                    });
+                    
+                    hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+                        errorCount++;
+                        logEvent('error', `HLS Error: ${data.type} - ${data.details}`);
+                        if (data.fatal) {
+                            showMessage(`Fatal HLS error: ${data.details}`, 'error');
+                            switch(data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    logEvent('info', 'Attempting to recover from network error');
+                                    hlsInstance.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    logEvent('info', 'Attempting to recover from media error');
+                                    hlsInstance.recoverMediaError();
+                                    break;
+                                default:
+                                    logEvent('error', 'Cannot recover from fatal error');
+                                    break;
+                            }
+                        }
+                    });
+
+                    hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+                        logEvent('info', `Quality switched to level ${data.level}`);
+                    });
+
+                    logEvent('success', 'HLS.js instance created and attached');
+                } catch (error) {
+                    logEvent('error', `HLS initialization failed: ${error.message}`);
+                    showMessage(`HLS initialization failed: ${error.message}`, 'error');
+                }
             } else {
                 showMessage('HLS is not supported in this browser', 'error');
                 logEvent('error', 'HLS not supported');
@@ -601,21 +680,26 @@
 
         function loadDASHStream(url) {
             if (typeof dashjs !== 'undefined') {
-                dashInstance = dashjs.MediaPlayer().create();
-                dashInstance.initialize(player.tech().el(), url, false);
-                
-                dashInstance.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {
-                    logEvent('success', 'DASH stream initialized');
-                    showMessage('DASH stream loaded successfully!', 'success');
-                });
-                
-                dashInstance.on(dashjs.MediaPlayer.events.ERROR, function(e) {
-                    errorCount++;
-                    logEvent('error', `DASH Error: ${e.error}`);
-                    showMessage(`DASH error: ${e.error}`, 'error');
-                });
+                try {
+                    dashInstance = dashjs.MediaPlayer().create();
+                    dashInstance.initialize(player.tech().el(), url, false);
+                    
+                    dashInstance.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {
+                        logEvent('success', 'DASH stream initialized');
+                        showMessage('DASH stream loaded successfully!', 'success');
+                    });
+                    
+                    dashInstance.on(dashjs.MediaPlayer.events.ERROR, function(e) {
+                        errorCount++;
+                        logEvent('error', `DASH Error: ${e.error || 'Unknown DASH error'}`);
+                        showMessage(`DASH error: ${e.error || 'Unknown DASH error'}`, 'error');
+                    });
 
-                logEvent('success', 'DASH.js instance created and attached');
+                    logEvent('success', 'DASH.js instance created and attached');
+                } catch (error) {
+                    logEvent('error', `DASH initialization failed: ${error.message}`);
+                    showMessage(`DASH initialization failed: ${error.message}`, 'error');
+                }
             } else {
                 showMessage('DASH.js not available', 'error');
                 logEvent('error', 'DASH.js not loaded');
@@ -652,56 +736,61 @@
         function updateStats() {
             if (!player) return;
 
-            // Update player state
-            const states = ['idle', 'loading', 'loaded', 'ready', 'playing', 'paused', 'ended'];
-            let currentState = 'unknown';
-            
-            if (player.ended()) currentState = 'ended';
-            else if (player.paused()) currentState = 'paused';
-            else if (!player.paused() && player.currentTime() > 0) currentState = 'playing';
-            else if (player.readyState() >= 3) currentState = 'ready';
-            else if (player.readyState() >= 2) currentState = 'loaded';
-            else if (player.readyState() >= 1) currentState = 'loading';
-            else currentState = 'idle';
-
-            document.getElementById('playerState').textContent = currentState;
-            document.getElementById('errorCount').textContent = errorCount;
-            document.getElementById('playbackRate').textContent = player.playbackRate() + 'x';
-            
-            // Network state
-            const networkStates = ['empty', 'idle', 'loading', 'no-source'];
-            document.getElementById('networkState').textContent = networkStates[player.networkState()] || 'unknown';
-            
-            // Tech used
-            document.getElementById('techUsed').textContent = player.tech().name_ || '-';
-            
-            // Buffer health
             try {
-                const buffered = player.buffered();
-                const currentTime = player.currentTime();
-                let bufferAhead = 0;
+                // Update player state
+                let currentState = 'unknown';
                 
-                for (let i = 0; i < buffered.length; i++) {
-                    if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
-                        bufferAhead = buffered.end(i) - currentTime;
-                        break;
+                if (player.ended()) currentState = 'ended';
+                else if (player.paused()) currentState = 'paused';
+                else if (!player.paused() && player.currentTime() > 0) currentState = 'playing';
+                else if (player.readyState() >= 3) currentState = 'ready';
+                else if (player.readyState() >= 2) currentState = 'loaded';
+                else if (player.readyState() >= 1) currentState = 'loading';
+                else currentState = 'idle';
+
+                document.getElementById('playerState').textContent = currentState;
+                document.getElementById('errorCount').textContent = errorCount;
+                document.getElementById('playbackRate').textContent = player.playbackRate() + 'x';
+                
+                // Network state
+                const networkStates = ['empty', 'idle', 'loading', 'no-source'];
+                const networkState = player.networkState ? player.networkState() : 0;
+                document.getElementById('networkState').textContent = networkStates[networkState] || 'unknown';
+                
+                // Tech used
+                const tech = player.tech();
+                document.getElementById('techUsed').textContent = tech?.name_ || '-';
+                
+                // Buffer health
+                try {
+                    const buffered = player.buffered();
+                    const currentTime = player.currentTime();
+                    let bufferAhead = 0;
+                    
+                    for (let i = 0; i < buffered.length; i++) {
+                        if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+                            bufferAhead = buffered.end(i) - currentTime;
+                            break;
+                        }
                     }
+                    
+                    document.getElementById('bufferHealth').textContent = Math.round(bufferAhead) + 's';
+                } catch (e) {
+                    document.getElementById('bufferHealth').textContent = '-';
                 }
                 
-                document.getElementById('bufferHealth').textContent = Math.round(bufferAhead) + 's';
-            } catch (e) {
-                document.getElementById('bufferHealth').textContent = '-';
-            }
-            
-            // Current quality (HLS specific)
-            if (hlsInstance && hlsInstance.currentLevel >= 0) {
-                const level = hlsInstance.levels[hlsInstance.currentLevel];
-                if (level) {
-                    document.getElementById('currentQuality').textContent = 
-                        `${level.width}x${level.height} @ ${Math.round(level.bitrate/1000)}kbps`;
+                // Current quality (HLS specific)
+                if (hlsInstance && hlsInstance.currentLevel >= 0) {
+                    const level = hlsInstance.levels[hlsInstance.currentLevel];
+                    if (level) {
+                        document.getElementById('currentQuality').textContent = 
+                            `${level.width}x${level.height} @ ${Math.round(level.bitrate/1000)}kbps`;
+                    }
+                } else {
+                    document.getElementById('currentQuality').textContent = '-';
                 }
-            } else {
-                document.getElementById('currentQuality').textContent = '-';
+            } catch (error) {
+                // Silently handle update errors to prevent spam
             }
         }
 
@@ -741,14 +830,13 @@
             if (statusUpdateInterval) {
                 clearInterval(statusUpdateInterval);
             }
-            if (hlsInstance) {
-                hlsInstance.destroy();
-            }
-            if (dashInstance) {
-                dashInstance.reset();
-            }
+            cleanupInstances();
             if (player) {
-                player.dispose();
+                try {
+                    player.dispose();
+                } catch (e) {
+                    // Ignore disposal errors
+                }
             }
         });
     </script>
