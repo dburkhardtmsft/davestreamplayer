@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dave Video Player - HLS/DASH Testing Tool</title>
+    <title>Dave Video Player - Advanced HLS/DASH Testing Tool</title>
     
     <!-- Video.js CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.5.2/video-js.css" rel="stylesheet">
@@ -550,7 +550,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Dave's Video Player</h1>
+            <h1>Dave's Advanced Video Player</h1>
             <p>Professional HLS & DASH Streaming Analysis Tool</p>
         </div>
         
@@ -596,7 +596,6 @@
                     <button class="btn-preset" onclick="loadPreset('hls-demo')">HLS Demo</button>
                     <button class="btn-preset" onclick="loadPreset('dash-demo')">DASH Demo</button>
                     <button class="btn-preset" onclick="loadPreset('apple-demo')">Apple Demo</button>
-                    <button class="btn-preset" onclick="loadPreset('low-latency')">Low Latency</button>
                 </div>
                 
                 <div id="messageArea"></div>
@@ -718,7 +717,7 @@
                             </div>
                         </div>
                         <div class="chart-container">
-                            <div class="chart-placeholder">Buffer Level Chart (Live buffer monitoring)</div>
+                            <canvas id="bufferChart"></canvas>
                         </div>
                     </div>
 
@@ -793,6 +792,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js" defer></script>
     <!-- DASH.js for DASH support -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dashjs/4.7.2/dash.all.min.js" defer></script>
+    <!-- Chart.js for buffer visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 
     <script>
         // Check if required libraries are loaded
@@ -823,6 +824,18 @@
         let metricsEnabled = true;
         let autoRecover = true;
         let stopOnStall = false;
+        let bufferChart;
+        let bufferChartData = {
+            labels: [],
+            datasets: [{
+                label: 'Buffer Level (seconds)',
+                data: [],
+                borderColor: '#0078d4',
+                backgroundColor: 'rgba(0, 120, 212, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        };
         
         // Metrics tracking
         let metrics = {
@@ -865,6 +878,9 @@
                     logEvent('error', 'Video.js library not loaded');
                     return;
                 }
+
+                // Initialize buffer chart
+                initializeBufferChart();
 
                 // Dispose of existing player if it exists
                 if (player) {
@@ -1374,6 +1390,51 @@
             }
         }
 
+        function initializeBufferChart() {
+            const ctx = document.getElementById('bufferChart');
+            if (!ctx) return;
+
+            if (bufferChart) {
+                bufferChart.destroy();
+            }
+
+            bufferChartData.labels = [];
+            bufferChartData.datasets[0].data = [];
+
+            bufferChart = new Chart(ctx, {
+                type: 'line',
+                data: bufferChartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 0
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Buffer (seconds)'
+                            }
+                        },
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
         function updateBufferMetrics() {
             if (!player || !player.buffered || typeof player.buffered !== 'function') return;
 
@@ -1391,6 +1452,23 @@
                     if (currentTime >= start && currentTime <= end) {
                         bufferAhead = end - currentTime;
                     }
+                }
+
+                // Update buffer chart
+                if (bufferChart) {
+                    const now = new Date();
+                    const timeStr = now.toLocaleTimeString();
+                    
+                    bufferChartData.labels.push(timeStr);
+                    bufferChartData.datasets[0].data.push(bufferAhead);
+
+                    // Keep last 30 data points
+                    if (bufferChartData.labels.length > 30) {
+                        bufferChartData.labels.shift();
+                        bufferChartData.datasets[0].data.shift();
+                    }
+
+                    bufferChart.update('none'); // Update without animation for performance
                 }
 
                 safeUpdateElement('bufferLevel', `${Math.round(bufferAhead)}s`);
@@ -1528,10 +1606,6 @@
                 },
                 'apple-demo': {
                     url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8',
-                    type: 'hls'
-                },
-                'low-latency': {
-                    url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
                     type: 'hls'
                 }
             };
