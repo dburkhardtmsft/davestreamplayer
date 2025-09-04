@@ -551,7 +551,7 @@
     <div class="container">
         <div class="header">
             <h1>Dave's Video Player</h1>
-            <p>HLS & DASH Streaming Analysis Tool</p>
+            <p>Professional HLS & DASH Streaming Analysis Tool</p>
         </div>
         
         <div class="main-content">
@@ -903,7 +903,7 @@
                         vhs: {
                             enableLowInitialPlaylist: true,
                             smoothQualityChange: true,
-                            overrideNative: true,
+                            overrideNative: !/iPad|iPhone|iPod/.test(navigator.userAgent),
                             enableWorker: true
                         }
                     }
@@ -1063,8 +1063,23 @@
             if (!player) return;
             
             const videoElement = player.tech().el();
+            
+            // Check for native HLS support (Safari, iOS)
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            
+            if (videoElement.canPlayType('application/vnd.apple.mpegurl') && (isIOS || isSafari)) {
+                // Use native HLS for iOS and Safari
+                player.src({
+                    src: url,
+                    type: 'application/vnd.apple.mpegurl'
+                });
+                logEvent('success', 'Using native HLS support');
+                showMessage('Stream loaded with native HLS support!', 'success');
+                return;
+            }
 
-            // Use HLS.js if supported
+            // Use HLS.js for other browsers
             if (Hls.isSupported()) {
                 try {
                     if (hlsInstance) {
