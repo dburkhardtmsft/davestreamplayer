@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dave Video Player - Working Version</title>
+    <title>Dave Video Player - Advanced HLS/DASH Testing Tool</title>
     
     <!-- Video.js CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.5.2/video-js.css" rel="stylesheet">
     
+    <!-- Custom Styling -->
     <style>
         * {
             margin: 0;
@@ -24,12 +25,13 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
             overflow: hidden;
+            backdrop-filter: blur(10px);
         }
 
         .header {
@@ -37,12 +39,45 @@
             color: white;
             padding: 30px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255,255,255,0.05) 10px,
+                rgba(255,255,255,0.05) 20px
+            );
+            animation: shimmer 20s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
         }
 
         .header h1 {
+            position: relative;
+            z-index: 2;
             font-size: 2.5rem;
             margin-bottom: 10px;
             font-weight: 300;
+        }
+
+        .header p {
+            position: relative;
+            z-index: 2;
+            opacity: 0.9;
+            font-size: 1.1rem;
         }
 
         .main-content {
@@ -97,7 +132,6 @@
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
-            margin-top: 15px;
         }
 
         .btn {
@@ -133,22 +167,9 @@
             transform: translateY(-1px);
         }
 
-        .btn-preset {
+        .btn-small {
             padding: 6px 12px;
-            background: #e9ecef;
-            border: 1px solid #dee2e6;
-            border-radius: 15px;
             font-size: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-right: 8px;
-            margin-bottom: 8px;
-        }
-
-        .btn-preset:hover {
-            background: #0078d4;
-            color: white;
-            border-color: #0078d4;
         }
 
         .video-section {
@@ -160,29 +181,203 @@
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             width: 100% !important;
-            height: 500px !important;
+            max-width: 100% !important;
+            height: auto !important;
         }
 
-        .message-area {
+        .controls-row {
+            display: flex;
+            gap: 10px;
             margin-top: 15px;
+            flex-wrap: wrap;
         }
 
-        .success-message {
-            background: #d4edda;
-            color: #155724;
-            padding: 12px;
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: white;
+            padding: 8px 12px;
             border-radius: 6px;
-            border: 1px solid #c3e6cb;
-            font-size: 14px;
+            border: 1px solid #dee2e6;
         }
 
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid #f5c6cb;
-            font-size: 14px;
+        .toggle-group label {
+            font-size: 12px;
+            font-weight: 500;
+            margin: 0;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 20px;
+            background: #ccc;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: #0078d4;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+
+        .toggle-switch.active::after {
+            transform: translateX(20px);
+        }
+
+        .diagnostics-panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            border: 1px solid #e9ecef;
+            overflow: hidden;
+        }
+
+        .diagnostics-header {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            padding: 15px 25px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+        }
+
+        .diagnostics-header:hover {
+            background: linear-gradient(135deg, #218838, #17a2b8);
+        }
+
+        .diagnostics-content {
+            display: none;
+            padding: 25px;
+        }
+
+        .diagnostics-content.open {
+            display: block;
+        }
+
+        .metrics-tabs {
+            display: flex;
+            border-bottom: 2px solid #dee2e6;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+
+        .metrics-tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            font-weight: 600;
+            color: #6c757d;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .metrics-tab.active {
+            color: #0078d4;
+            border-bottom-color: #0078d4;
+        }
+
+        .metrics-tab:hover {
+            color: #0078d4;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: #6c757d;
+            font-weight: 600;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .metric-trend {
+            font-size: 11px;
+            margin-top: 5px;
+        }
+
+        .metric-trend.up {
+            color: #28a745;
+        }
+
+        .metric-trend.down {
+            color: #dc3545;
+        }
+
+        .metric-trend.stable {
+            color: #6c757d;
+        }
+
+        .quality-levels {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .quality-btn {
+            padding: 6px 12px;
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .quality-btn.active {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+        }
+
+        .quality-btn:hover {
+            background: #007bff;
+            color: white;
         }
 
         .logs-section {
@@ -192,7 +387,7 @@
             padding: 15px;
             font-family: 'Courier New', monospace;
             font-size: 12px;
-            max-height: 300px;
+            max-height: 200px;
             overflow-y: auto;
             margin-top: 15px;
         }
@@ -222,6 +417,101 @@
             color: #ffaa44;
         }
 
+        .chart-container {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 15px;
+            height: 200px;
+            position: relative;
+        }
+
+        .chart-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            border: 1px solid #f5c6cb;
+            font-size: 14px;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            border: 1px solid #c3e6cb;
+            font-size: 14px;
+        }
+
+        .warning-message {
+            background: #fff3cd;
+            color: #856404;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            border: 1px solid #ffeaa7;
+            font-size: 14px;
+        }
+
+        .preset-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .btn-preset {
+            padding: 6px 12px;
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-preset:hover {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+        }
+
+        .health-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .health-excellent {
+            background: #28a745;
+            box-shadow: 0 0 6px #28a745;
+        }
+
+        .health-good {
+            background: #ffc107;
+            box-shadow: 0 0 6px #ffc107;
+        }
+
+        .health-poor {
+            background: #dc3545;
+            box-shadow: 0 0 6px #dc3545;
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2rem;
@@ -242,9 +532,17 @@
             .btn-group {
                 flex-direction: column;
             }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
 
             .video-js {
-                height: 300px !important;
+                height: 250px !important;
+            }
+
+            .controls-row {
+                flex-direction: column;
             }
         }
     </style>
@@ -252,8 +550,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Dave's Video Player</h1>
-            <p>Professional HLS & DASH Streaming Tool</p>
+            <h1>Dave's Advanced Video Player</h1>
+            <p>Professional HLS & DASH Streaming Analysis Tool</p>
         </div>
         
         <div class="main-content">
@@ -272,19 +570,36 @@
                         </select>
                     </div>
                 </div>
+
+                <div class="controls-row">
+                    <div class="toggle-group">
+                        <label>Auto-Recover Errors</label>
+                        <div class="toggle-switch active" id="autoRecoverToggle"></div>
+                    </div>
+                    <div class="toggle-group">
+                        <label>Stop on Stall</label>
+                        <div class="toggle-switch" id="stopOnStallToggle"></div>
+                    </div>
+                    <div class="toggle-group">
+                        <label>Enable Metrics</label>
+                        <div class="toggle-switch active" id="metricsToggle"></div>
+                    </div>
+                </div>
                 
                 <div class="btn-group">
                     <button class="btn btn-primary" onclick="loadStream()">Load Stream</button>
-                    <button class="btn btn-secondary" onclick="clearLogs()">Clear Logs</button>
+                    <button class="btn btn-secondary" onclick="exportDiagnostics()">Export Data</button>
+                    <button class="btn btn-secondary" onclick="clearAllLogs()">Clear Logs</button>
                 </div>
                 
-                <div style="margin-top: 15px;">
+                <div class="preset-buttons">
                     <button class="btn-preset" onclick="loadPreset('hls-demo')">HLS Demo</button>
+                    <button class="btn-preset" onclick="loadPreset('dash-demo')">DASH Demo</button>
                     <button class="btn-preset" onclick="loadPreset('apple-demo')">Apple Demo</button>
-                    <button class="btn-preset" onclick="loadPreset('sintel')">Sintel Demo</button>
+                    <button class="btn-preset" onclick="loadPreset('low-latency')">Low Latency</button>
                 </div>
                 
-                <div id="messageArea" class="message-area"></div>
+                <div id="messageArea"></div>
             </div>
             
             <div class="video-section">
@@ -293,120 +608,367 @@
                     class="video-js vjs-default-skin"
                     controls
                     preload="auto"
+                    width="100%"
+                    height="400"
                     data-setup="{}">
                     <p class="vjs-no-js">
                         To view this video please enable JavaScript, and consider upgrading to a web browser that
                         <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>.
                     </p>
                 </video>
+
+                <div class="controls-row">
+                    <div class="quality-levels" id="qualityLevels">
+                        <!-- Quality buttons will be populated dynamically -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="diagnostics-panel">
+                <div class="diagnostics-header" onclick="toggleDiagnostics()">
+                    <span>🔬 Advanced Diagnostics & Analytics</span>
+                    <span id="diagnosticsArrow">▼</span>
+                </div>
+                <div class="diagnostics-content" id="diagnosticsContent">
+                    <div class="metrics-tabs">
+                        <button class="metrics-tab active" onclick="showTab('overview')">Overview</button>
+                        <button class="metrics-tab" onclick="showTab('network')">Network</button>
+                        <button class="metrics-tab" onclick="showTab('buffer')">Buffer</button>
+                        <button class="metrics-tab" onclick="showTab('quality')">Quality</button>
+                        <button class="metrics-tab" onclick="showTab('errors')">Errors</button>
+                    </div>
+
+                    <div id="overview-tab" class="tab-content active">
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-label">Stream Health</div>
+                                <div class="metric-value">
+                                    <span class="health-indicator health-excellent" id="healthIndicator"></span>
+                                    <span id="healthStatus">Excellent</span>
+                                </div>
+                                <div class="metric-trend stable" id="healthTrend">Stable connection</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Bandwidth</div>
+                                <div class="metric-value" id="bandwidth">- kbps</div>
+                                <div class="metric-trend stable" id="bandwidthTrend">Calculating...</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Buffer Health</div>
+                                <div class="metric-value" id="bufferLevel">- seconds</div>
+                                <div class="metric-trend stable" id="bufferTrend">Optimal</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Current Quality</div>
+                                <div class="metric-value" id="currentRes">-</div>
+                                <div class="metric-trend stable" id="qualityTrend">Auto-selected</div>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <div class="chart-placeholder">Bandwidth Chart (Real-time visualization would go here)</div>
+                        </div>
+                    </div>
+
+                    <div id="network-tab" class="tab-content">
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-label">Requests/Min</div>
+                                <div class="metric-value" id="requestRate">0</div>
+                                <div class="metric-trend stable">Normal rate</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Failed Requests</div>
+                                <div class="metric-value" id="failedRequests">0</div>
+                                <div class="metric-trend stable">No failures</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Avg Response Time</div>
+                                <div class="metric-value" id="avgResponseTime">- ms</div>
+                                <div class="metric-trend stable">Good latency</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">CDN Performance</div>
+                                <div class="metric-value" id="cdnPerf">Analyzing...</div>
+                                <div class="metric-trend stable">Monitoring</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="buffer-tab" class="tab-content">
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-label">Buffer Size</div>
+                                <div class="metric-value" id="bufferSize">- MB</div>
+                                <div class="metric-trend stable">Within limits</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Rebuffer Events</div>
+                                <div class="metric-value" id="rebufferCount">0</div>
+                                <div class="metric-trend stable">Smooth playback</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Stall Duration</div>
+                                <div class="metric-value" id="stallDuration">0s</div>
+                                <div class="metric-trend stable">No stalls</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Dropped Frames</div>
+                                <div class="metric-value" id="droppedFrames">0</div>
+                                <div class="metric-trend stable">Optimal</div>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <div class="chart-placeholder">Buffer Level Chart (Live buffer monitoring)</div>
+                        </div>
+                    </div>
+
+                    <div id="quality-tab" class="tab-content">
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-label">Quality Switches</div>
+                                <div class="metric-value" id="qualitySwitches">0</div>
+                                <div class="metric-trend stable">Stable quality</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Avg Bitrate</div>
+                                <div class="metric-value" id="avgBitrate">- kbps</div>
+                                <div class="metric-trend stable">Optimizing</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Resolution</div>
+                                <div class="metric-value" id="resolution">-</div>
+                                <div class="metric-trend stable">HD Quality</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Frame Rate</div>
+                                <div class="metric-value" id="frameRate">- fps</div>
+                                <div class="metric-trend stable">Smooth</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="errors-tab" class="tab-content">
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-label">Total Errors</div>
+                                <div class="metric-value" id="totalErrors">0</div>
+                                <div class="metric-trend stable">Clean session</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Network Errors</div>
+                                <div class="metric-value" id="networkErrors">0</div>
+                                <div class="metric-trend stable">Stable connection</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Media Errors</div>
+                                <div class="metric-value" id="mediaErrors">0</div>
+                                <div class="metric-trend stable">No decode issues</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Last Error</div>
+                                <div class="metric-value" id="lastError">None</div>
+                                <div class="metric-trend stable">All good</div>
+                            </div>
+                        </div>
+                        <div class="logs-section" id="errorLogs">
+                            <div class="log-entry log-info">
+                                <span class="log-timestamp">[Ready]</span> Error tracking initialized
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="logs-section" id="generalLogs">
                 <div class="log-entry log-info">
-                    <span class="log-timestamp">[Ready]</span> Dave's Video Player initialized
+                    <span class="log-timestamp">[Ready]</span> Dave's Advanced Video Player initialized
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Video.js JavaScript -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.5.2/video.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.5.2/video.min.js" defer></script>
     <!-- HLS.js for HLS support -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js" defer></script>
+    <!-- DASH.js for DASH support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dashjs/4.7.2/dash.all.min.js" defer></script>
 
     <script>
+        // Check if required libraries are loaded
+        function checkLibrariesLoaded() {
+            return typeof videojs !== 'undefined' && 
+                   typeof Hls !== 'undefined' && 
+                   typeof dashjs !== 'undefined';
+        }
+
+        // Retry initialization if libraries aren't loaded yet
+        function waitForLibraries(callback, maxAttempts = 10) {
+            let attempts = 0;
+            const checkInterval = setInterval(() => {
+                if (checkLibrariesLoaded()) {
+                    clearInterval(checkInterval);
+                    callback();
+                } else if (++attempts >= maxAttempts) {
+                    clearInterval(checkInterval);
+                    console.error('Failed to load required libraries');
+                    showMessage('Failed to load required video libraries. Please refresh the page.', 'error');
+                }
+            }, 500);
+        }
         let player;
         let hlsInstance;
+        let dashInstance;
         let diagnosticsOpen = false;
-        let metricsInterval;
-        let currentLevels = [];
+        let metricsEnabled = true;
+        let autoRecover = true;
+        let stopOnStall = false;
         
         // Metrics tracking
         let metrics = {
-            qualitySwitches: 0,
-            startTime: null,
             bandwidth: [],
-            bufferHealth: []
+            bufferHealth: [],
+            qualitySwitches: 0,
+            errorCount: 0,
+            networkErrors: 0,
+            mediaErrors: 0,
+            rebufferCount: 0,
+            stallDuration: 0,
+            requestCount: 0,
+            failedRequests: 0,
+            responseTimes: [],
+            startTime: null
         };
-        
-        // Wait for DOM and scripts to load
+
+        let statusUpdateInterval;
+        let metricsInterval;
+
+        // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
-            // Add a delay to ensure all scripts are loaded
-            setTimeout(() => {
+            waitForLibraries(() => {
                 initializePlayer();
-            }, 1000);
+                setupEventListeners();
+                startStatusUpdates();
+                startMetricsCollection();
+            });
         });
 
         function initializePlayer() {
             try {
-                logEvent('info', 'Checking Video.js availability...');
-                
                 if (typeof videojs === 'undefined') {
-                    logEvent('error', 'Video.js library not loaded - check internet connection');
-                    showMessage('Video.js library failed to load. Please check your internet connection and refresh the page.', 'error');
+                    logEvent('error', 'Video.js library not loaded');
                     return;
                 }
 
-                logEvent('info', 'Video.js found, initializing player...');
+                // Destroy existing player instance if it exists
+                if (window.player) {
+                    window.player.dispose();
+                }
 
-                // Simple VideoJS configuration
                 const options = {
-                    controls: true,
                     responsive: true,
-                    fluid: false,
-                    playbackRates: [0.5, 1, 1.5, 2],
-                    preload: 'auto'
+                    fluid: true,
+                    aspectRatio: '16:9',
+                    playbackRates: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2],
+                    controls: true,
+                    preload: 'auto',
+                    html5: {
+                        vhs: {
+                            enableLowInitialPlaylist: true,
+                            smoothQualityChange: true,
+                            overrideNative: !videojs.browser.IS_SAFARI,
+                            bandwidth: 4194304,
+                            enableWorker: true
+                        }
+                    }
                 };
 
                 player = videojs('videoPlayer', options);
                 
                 player.ready(() => {
-                    logEvent('success', 'Video.js player ready!');
-                    setupBasicEvents();
-                    startMetricsCollection();
-                    showMessage('Player initialized successfully!', 'success');
+                    logEvent('success', 'Video.js player ready');
+                    setupPlayerEvents();
                 });
 
+                logEvent('success', 'Advanced Video Player initialized');
             } catch (error) {
                 logEvent('error', `Failed to initialize player: ${error.message}`);
-                showMessage(`Failed to initialize player: ${error.message}`, 'error');
             }
         }
 
-        function setupBasicEvents() {
+        function setupPlayerEvents() {
             if (!player) return;
 
+            // Basic playback events
             player.on('loadstart', () => {
                 logEvent('info', 'Stream loading started');
                 metrics.startTime = Date.now();
             });
             
-            player.on('loadeddata', () => {
-                logEvent('success', 'Stream data loaded');
+            player.on('loadedmetadata', () => {
+                logEvent('success', 'Stream metadata loaded');
+                updateVideoInfo();
             });
             
-            player.on('canplay', () => {
-                logEvent('success', 'Stream ready to play');
+            player.on('canplay', () => logEvent('success', 'Stream ready to play'));
+            player.on('playing', () => logEvent('success', 'Playback started'));
+            player.on('pause', () => logEvent('info', 'Playback paused'));
+            player.on('ended', () => logEvent('info', 'Playback ended'));
+            
+            // Buffer events
+            player.on('waiting', () => {
+                logEvent('warning', 'Buffering...');
+                metrics.rebufferCount++;
+                updateMetricsDisplay();
             });
             
-            player.on('playing', () => {
-                logEvent('success', 'Playback started');
-            });
-            
-            player.on('pause', () => {
-                logEvent('info', 'Playback paused');
-            });
-            
-            player.on('timeupdate', () => {
-                updatePlaybackTime();
-            });
-            
+            // Error handling
             player.on('error', (e) => {
+                metrics.errorCount++;
                 const error = player.error();
-                const errorMsg = error ? `${error.code}: ${error.message}` : 'Unknown error';
+                const errorMsg = error?.message || error?.code || 'Unknown error';
                 logEvent('error', `Player error: ${errorMsg}`);
-                showMessage(`Playback error: ${errorMsg}`, 'error');
+                logErrorEvent('PLAYER_ERROR', errorMsg);
+                
+                if (autoRecover && error?.code !== 4) {
+                    setTimeout(() => {
+                        logEvent('info', 'Attempting auto-recovery...');
+                        player.error(null);
+                    }, 1000);
+                }
+                updateMetricsDisplay();
             });
+        }
+
+        function setupEventListeners() {
+            // Toggle switches
+            const autoRecoverToggle = document.getElementById('autoRecoverToggle');
+            const stopOnStallToggle = document.getElementById('stopOnStallToggle');
+            const metricsToggle = document.getElementById('metricsToggle');
+
+            if (autoRecoverToggle) {
+                autoRecoverToggle.addEventListener('click', function() {
+                    autoRecover = !autoRecover;
+                    this.classList.toggle('active', autoRecover);
+                    logEvent('info', `Auto-recovery ${autoRecover ? 'enabled' : 'disabled'}`);
+                });
+            }
+
+            if (stopOnStallToggle) {
+                stopOnStallToggle.addEventListener('click', function() {
+                    stopOnStall = !stopOnStall;
+                    this.classList.toggle('active', stopOnStall);
+                    logEvent('info', `Stop on stall ${stopOnStall ? 'enabled' : 'disabled'}`);
+                });
+            }
+
+            if (metricsToggle) {
+                metricsToggle.addEventListener('click', function() {
+                    metricsEnabled = !metricsEnabled;
+                    this.classList.toggle('active', metricsEnabled);
+                    logEvent('info', `Metrics collection ${metricsEnabled ? 'enabled' : 'disabled'}`);
+                });
+            }
         }
 
         function loadStream() {
@@ -419,28 +981,17 @@
             }
 
             if (!player) {
-                showMessage('Player not ready. Please wait and try again.', 'error');
+                showMessage('Player not initialized yet', 'error');
                 return;
             }
 
             clearMessage();
-            logEvent('info', `Loading stream: ${url}`);
             resetMetrics();
+            logEvent('info', `Loading stream: ${url}`);
+            logEvent('info', `Stream type: ${streamType}`);
 
-            // Clean up existing HLS instance
-            if (hlsInstance) {
-                try {
-                    hlsInstance.destroy();
-                    hlsInstance = null;
-                    logEvent('info', 'Previous HLS instance cleaned up');
-                } catch (e) {
-                    logEvent('info', 'HLS cleanup completed');
-                }
-            }
-
-            // Hide quality controls until we know what's available
-            document.getElementById('qualityControls').style.display = 'none';
-            currentLevels = [];
+            // Clean up existing instances
+            cleanupInstances();
 
             // Auto-detect stream type
             let detectedType = streamType;
@@ -450,94 +1001,50 @@
                 } else if (url.includes('.mpd')) {
                     detectedType = 'dash';
                 } else {
-                    detectedType = 'hls'; // default assumption
+                    detectedType = 'hls';
                 }
             }
-
-            logEvent('info', `Stream type: ${detectedType.toUpperCase()}`);
-            updateElement('streamType', detectedType.toUpperCase());
-            updateElement('streamInfo', 'Loading...');
 
             if (detectedType === 'hls') {
                 loadHLSStream(url);
             } else if (detectedType === 'dash') {
-                // For DASH, try direct loading first
-                loadDirectStream(url, 'application/dash+xml');
-            } else {
-                // Try direct loading
-                loadDirectStream(url);
-            }
-        }() {
-            const url = document.getElementById('streamUrl').value.trim();
-            const streamType = document.getElementById('streamType').value;
-            
-            if (!url) {
-                showMessage('Please enter a stream URL', 'error');
-                return;
+                loadDASHStream(url);
             }
 
-            if (!player) {
-                showMessage('Player not ready. Please wait and try again.', 'error');
-                return;
-            }
+            logEvent('success', `Stream type detected: ${detectedType.toUpperCase()}`);
+        }
 
-            clearMessage();
-            logEvent('info', `Loading stream: ${url}`);
-            resetMetrics();
-
-            // Clean up existing HLS instance
+        function cleanupInstances() {
             if (hlsInstance) {
                 try {
                     hlsInstance.destroy();
-                    hlsInstance = null;
-                    logEvent('info', 'Previous HLS instance cleaned up');
                 } catch (e) {
-                    logEvent('info', 'HLS cleanup completed');
+                    logEvent('info', 'HLS instance cleanup completed');
                 }
+                hlsInstance = null;
             }
-
-            // Hide quality controls until we know what's available
-            document.getElementById('qualityControls').style.display = 'none';
-            currentLevels = [];
-
-            // Auto-detect stream type
-            let detectedType = streamType;
-            if (streamType === 'auto') {
-                if (url.includes('.m3u8')) {
-                    detectedType = 'hls';
-                } else if (url.includes('.mpd')) {
-                    detectedType = 'dash';
-                } else {
-                    detectedType = 'hls'; // default assumption
+            if (dashInstance) {
+                try {
+                    dashInstance.reset();
+                } catch (e) {
+                    logEvent('info', 'DASH instance cleanup completed');
                 }
-            }
-
-            logEvent('info', `Stream type: ${detectedType.toUpperCase()}`);
-            updateElement('streamType', detectedType.toUpperCase());
-            updateElement('streamInfo', 'Loading...');
-
-            if (detectedType === 'hls') {
-                loadHLSStream(url);
-            } else if (detectedType === 'dash') {
-                // For DASH, try direct loading first
-                loadDirectStream(url, 'application/dash+xml');
-            } else {
-                // Try direct loading
-                loadDirectStream(url);
+                dashInstance = null;
             }
         }
 
         function loadHLSStream(url) {
+            if (!player) return;
+            
             const videoElement = player.tech().el();
             
-            // Check if browser supports HLS natively (Safari)
-            if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-                logEvent('info', 'Using native HLS support');
-                updateElement('streamInfo', 'Native HLS');
+            // Check for native HLS support first (Safari)
+            if (videoElement.canPlayType('application/vnd.apple.mpegurl') && typeof Hls === 'undefined') {
                 player.src({
                     src: url,
                     type: 'application/vnd.apple.mpegurl'
                 });
+                logEvent('success', 'Using native HLS support');
                 showMessage('Stream loaded with native HLS support!', 'success');
                 return;
             }
@@ -545,134 +1052,147 @@
             // Use HLS.js for other browsers
             if (typeof Hls !== 'undefined' && Hls.isSupported()) {
                 try {
-                    logEvent('info', 'Using HLS.js for stream playback');
-                    updateElement('streamInfo', 'HLS.js');
-                    
                     hlsInstance = new Hls({
                         debug: false,
-                        enableWorker: true
+                        enableWorker: true,
+                        lowLatencyMode: false,
+                        backBufferLength: 90,
+                        maxBufferLength: 30,
+                        maxMaxBufferLength: 600,
+                        startLevel: -1,
+                        autoStartLoad: true,
+                        capLevelToPlayerSize: true,
+                        abrEwmaDefaultEstimate: 5e5,
+                        abrEwmaSlowVoD: 3,
+                        abrEwmaFastVoD: 3,
+                        abrEwmaSlowLive: 9,
+                        abrEwmaFastLive: 5,
+                        maxStarvationDelay: 4,
+                        maxLoadingDelay: 4
                     });
                     
                     hlsInstance.loadSource(url);
                     hlsInstance.attachMedia(videoElement);
                     
+                    // HLS.js event listeners for advanced diagnostics
                     hlsInstance.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
-                        logEvent('success', `HLS manifest parsed - ${data.levels.length} quality levels found`);
-                        currentLevels = data.levels;
-                        populateQualityLevels(data.levels);
+                        logEvent('success', 'HLS manifest parsed successfully');
+                        logEvent('info', `Found ${data.levels.length} quality levels`);
                         showMessage('HLS stream loaded successfully!', 'success');
-                        updateElement('streamInfo', `${data.levels.length} levels`);
+                        populateQualityLevels(data.levels);
                     });
                     
                     hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
                         metrics.qualitySwitches++;
                         logEvent('info', `Quality switched to level ${data.level}`);
                         updateQualityDisplay(data.level);
-                        updateElement('qualitySwitches', metrics.qualitySwitches);
+                        updateMetricsDisplay();
                     });
 
                     hlsInstance.on(Hls.Events.FRAG_LOADED, function(event, data) {
-                        // Update bandwidth info when fragments load
-                        if (hlsInstance.bandwidthEstimate) {
-                            const bw = Math.round(hlsInstance.bandwidthEstimate / 1000);
-                            updateElement('bandwidth', `${bw} kbps`);
-                            
-                            // Store bandwidth data for trend analysis
-                            metrics.bandwidth.push({
-                                time: Date.now(),
-                                value: bw
-                            });
-                            
-                            // Keep only last 10 readings
-                            if (metrics.bandwidth.length > 10) {
-                                metrics.bandwidth.shift();
+                        metrics.requestCount++;
+                        const responseTime = data.frag.loadCounter || (data.stats?.loading?.end - data.stats?.loading?.start) || 0;
+                        if (responseTime > 0) {
+                            metrics.responseTimes.push(responseTime);
+                            if (metrics.responseTimes.length > 100) {
+                                metrics.responseTimes.shift();
                             }
-                            
-                            updateBandwidthTrend();
                         }
+                        updateNetworkMetrics();
                     });
-                    
+
                     hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+                        metrics.errorCount++;
+                        
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            metrics.networkErrors++;
+                            metrics.failedRequests++;
+                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            metrics.mediaErrors++;
+                        }
+
                         logEvent('error', `HLS Error: ${data.type} - ${data.details}`);
+                        logErrorEvent(data.type, data.details);
                         
                         if (data.fatal) {
                             showMessage(`Fatal HLS error: ${data.details}`, 'error');
                             
-                            // Try basic recovery
-                            switch(data.type) {
-                                case Hls.ErrorTypes.NETWORK_ERROR:
-                                    logEvent('info', 'Attempting network error recovery');
-                                    setTimeout(() => {
-                                        if (hlsInstance) {
-                                            hlsInstance.startLoad();
-                                        }
-                                    }, 1000);
-                                    break;
-                                case Hls.ErrorTypes.MEDIA_ERROR:
-                                    logEvent('info', 'Attempting media error recovery');
-                                    setTimeout(() => {
-                                        if (hlsInstance) {
-                                            hlsInstance.recoverMediaError();
-                                        }
-                                    }, 1000);
-                                    break;
-                                default:
-                                    logEvent('error', 'Cannot recover from this error type');
-                                    break;
+                            if (autoRecover) {
+                                switch(data.type) {
+                                    case Hls.ErrorTypes.NETWORK_ERROR:
+                                        logEvent('info', 'Attempting network error recovery');
+                                        hlsInstance.startLoad();
+                                        break;
+                                    case Hls.ErrorTypes.MEDIA_ERROR:
+                                        logEvent('info', 'Attempting media error recovery');
+                                        hlsInstance.recoverMediaError();
+                                        break;
+                                    default:
+                                        logEvent('error', 'Cannot recover from fatal error');
+                                        break;
+                                }
                             }
                         }
+                        updateMetricsDisplay();
                     });
 
-                    logEvent('success', 'HLS.js instance created and attached');
+                    hlsInstance.on(Hls.Events.BUFFER_APPENDED, function(event, data) {
+                        updateBufferMetrics();
+                    });
+
+                    logEvent('success', 'HLS.js instance created with advanced configuration');
                 } catch (error) {
-                    logEvent('error', `HLS.js initialization failed: ${error.message}`);
-                    showMessage(`HLS.js failed: ${error.message}`, 'error');
-                    
-                    // Fallback to direct loading
-                    loadDirectStream(url, 'application/vnd.apple.mpegurl');
+                    logEvent('error', `HLS initialization failed: ${error.message}`);
+                    showMessage(`HLS initialization failed: ${error.message}`, 'error');
                 }
             } else {
-                logEvent('warning', 'HLS.js not available, trying direct loading');
-                loadDirectStream(url, 'application/vnd.apple.mpegurl');
+                showMessage('HLS is not supported in this browser', 'error');
+                logEvent('error', 'HLS not supported');
             }
         }
 
-        function loadDirectStream(url, mimeType = null) {
-            try {
-                logEvent('info', 'Attempting direct stream loading');
-                updateElement('streamInfo', 'Direct');
-                
-                const sourceObj = { src: url };
-                if (mimeType) {
-                    sourceObj.type = mimeType;
+        function loadDASHStream(url) {
+            if (typeof dashjs !== 'undefined') {
+                try {
+                    dashInstance = dashjs.MediaPlayer().create();
+                    dashInstance.initialize(player.tech().el(), url, false);
+                    
+                    dashInstance.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {
+                        logEvent('success', 'DASH stream initialized');
+                        showMessage('DASH stream loaded successfully!', 'success');
+                    });
+                    
+                    dashInstance.on(dashjs.MediaPlayer.events.ERROR, function(e) {
+                        metrics.errorCount++;
+                        logEvent('error', `DASH Error: ${e.error || 'Unknown DASH error'}`);
+                        logErrorEvent('DASH_ERROR', e.error || 'Unknown DASH error');
+                        showMessage(`DASH error: ${e.error || 'Unknown DASH error'}`, 'error');
+                        updateMetricsDisplay();
+                    });
+
+                    dashInstance.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_REQUESTED, function(e) {
+                        metrics.qualitySwitches++;
+                        logEvent('info', `DASH quality change requested: ${e.newQuality}`);
+                        updateMetricsDisplay();
+                    });
+
+                    logEvent('success', 'DASH.js instance created and attached');
+                } catch (error) {
+                    logEvent('error', `DASH initialization failed: ${error.message}`);
+                    showMessage(`DASH initialization failed: ${error.message}`, 'error');
                 }
-                
-                player.src(sourceObj);
-                showMessage('Stream loaded directly!', 'success');
-                
-            } catch (error) {
-                logEvent('error', `Direct loading failed: ${error.message}`);
-                showMessage(`Direct loading failed: ${error.message}`, 'error');
+            } else {
+                showMessage('DASH.js not available', 'error');
+                logEvent('error', 'DASH.js not loaded');
             }
         }
 
         function populateQualityLevels(levels) {
             const container = document.getElementById('qualityLevels');
-            const controls = document.getElementById('qualityControls');
+            if (!container) return;
             
-            if (!container || !controls) return;
+            container.innerHTML = '<button class="quality-btn active" onclick="setQualityLevel(-1)">Auto</button>';
             
-            // Clear existing buttons
-            container.innerHTML = '';
-            
-            // Add Auto button
-            const autoBtn = document.createElement('button');
-            autoBtn.className = 'quality-btn active';
-            autoBtn.textContent = 'Auto';
-            autoBtn.onclick = () => setQualityLevel(-1);
-            container.appendChild(autoBtn);
-            
-            // Add quality level buttons
             levels.forEach((level, index) => {
                 const btn = document.createElement('button');
                 btn.className = 'quality-btn';
@@ -680,154 +1200,291 @@
                 btn.onclick = () => setQualityLevel(index);
                 container.appendChild(btn);
             });
-            
-            // Show quality controls
-            controls.style.display = 'block';
-            logEvent('info', `Quality controls populated with ${levels.length} levels`);
         }
 
         function setQualityLevel(level) {
-            if (!hlsInstance) {
-                logEvent('warning', 'Cannot change quality - HLS instance not available');
-                return;
-            }
-            
-            hlsInstance.currentLevel = level;
-            logEvent('info', `Manual quality level set to: ${level === -1 ? 'Auto' : level}`);
-            
-            // Update button states
-            document.querySelectorAll('.quality-btn').forEach(btn => btn.classList.remove('active'));
-            const buttons = document.querySelectorAll('.quality-btn');
-            if (level === -1 && buttons[0]) {
-                buttons[0].classList.add('active');
-            } else if (buttons[level + 1]) {
-                buttons[level + 1].classList.add('active');
-            }
-        }
-
-        function updateQualityDisplay(levelIndex) {
-            if (currentLevels && currentLevels[levelIndex]) {
-                const level = currentLevels[levelIndex];
-                updateElement('currentRes', `${level.width}x${level.height}`);
-                updateElement('qualityTrend', `${Math.round(level.bitrate/1000)} kbps`);
-            }
-        }
-
-        function startMetricsCollection() {
-            if (metricsInterval) clearInterval(metricsInterval);
-            
-            metricsInterval = setInterval(() => {
-                if (player) {
-                    updateBufferMetrics();
-                }
-            }, 1000);
-        }
-
-        function updateBufferMetrics() {
-            if (!player || typeof player.buffered !== 'function') return;
-
-            try {
-                const buffered = player.buffered();
-                const currentTime = player.currentTime();
-                let bufferAhead = 0;
+            if (hlsInstance) {
+                hlsInstance.currentLevel = level;
+                logEvent('info', `Manual quality level set to: ${level === -1 ? 'Auto' : level}`);
                 
-                for (let i = 0; i < buffered.length; i++) {
-                    const start = buffered.start(i);
-                    const end = buffered.end(i);
-                    
-                    if (currentTime >= start && currentTime <= end) {
-                        bufferAhead = end - currentTime;
-                        break;
-                    }
+                // Update button states
+                document.querySelectorAll('.quality-btn').forEach(btn => btn.classList.remove('active'));
+                const buttons = document.querySelectorAll('.quality-btn');
+                if (level === -1 && buttons[0]) {
+                    buttons[0].classList.add('active');
+                } else if (buttons[level + 1]) {
+                    buttons[level + 1].classList.add('active');
                 }
-
-                updateElement('bufferLevel', `${Math.round(bufferAhead)}s`);
-
-                // Update buffer trend
-                let bufferStatus = 'Optimal';
-                if (bufferAhead < 3) {
-                    bufferStatus = 'Low';
-                } else if (bufferAhead > 15) {
-                    bufferStatus = 'High';
-                }
-                updateElement('bufferTrend', bufferStatus);
-                
-                // Store buffer data
-                metrics.bufferHealth.push({
-                    time: Date.now(),
-                    value: bufferAhead
-                });
-                
-                // Keep only last 10 readings
-                if (metrics.bufferHealth.length > 10) {
-                    metrics.bufferHealth.shift();
-                }
-
-            } catch (error) {
-                updateElement('bufferLevel', '-');
             }
-        }
-
-        function updateBandwidthTrend() {
-            if (metrics.bandwidth.length < 2) return;
-            
-            const current = metrics.bandwidth[metrics.bandwidth.length - 1].value;
-            const previous = metrics.bandwidth[metrics.bandwidth.length - 2].value;
-            const change = current - previous;
-            
-            let trend = 'Stable';
-            if (Math.abs(change) > current * 0.1) { // 10% change threshold
-                trend = change > 0 ? 'Increasing' : 'Decreasing';
-            }
-            
-            updateElement('bandwidthTrend', trend);
-        }
-
-        function updatePlaybackTime() {
-            if (!player) return;
-            
-            const currentTime = player.currentTime();
-            const duration = player.duration();
-            
-            if (currentTime && !isNaN(currentTime)) {
-                updateElement('playbackTime', formatTime(currentTime));
-            }
-            
-            if (duration && !isNaN(duration)) {
-                updateElement('durationInfo', `/ ${formatTime(duration)}`);
-            }
-        }
-
-        function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
 
         function resetMetrics() {
             metrics = {
-                qualitySwitches: 0,
-                startTime: Date.now(),
                 bandwidth: [],
-                bufferHealth: []
+                bufferHealth: [],
+                qualitySwitches: 0,
+                errorCount: 0,
+                networkErrors: 0,
+                mediaErrors: 0,
+                rebufferCount: 0,
+                stallDuration: 0,
+                requestCount: 0,
+                failedRequests: 0,
+                responseTimes: [],
+                startTime: Date.now()
             };
-            
-            // Reset UI
-            updateElement('qualitySwitches', '0');
-            updateElement('bandwidth', '- kbps');
-            updateElement('bufferLevel', '- seconds');
-            updateElement('currentRes', '-');
-            updateElement('playbackTime', '00:00');
-            updateElement('durationInfo', '/ 00:00');
+            updateMetricsDisplay();
         }
 
-        function updateElement(id, value) {
+        function startStatusUpdates() {
+            if (statusUpdateInterval) clearInterval(statusUpdateInterval);
+            statusUpdateInterval = setInterval(() => {
+                if (player && metricsEnabled) {
+                    updateBufferMetrics();
+                    updateBandwidthMetrics();
+                    updateGeneralMetrics();
+                }
+            }, 1000);
+        }
+
+        function startMetricsCollection() {
+            if (metricsInterval) clearInterval(metricsInterval);
+            metricsInterval = setInterval(() => {
+                if (metricsEnabled && player) {
+                    collectAdvancedMetrics();
+                }
+            }, 5000);
+        }
+
+        function collectAdvancedMetrics() {
+            try {
+                // Collect bandwidth data
+                if (hlsInstance && hlsInstance.bandwidthEstimate) {
+                    metrics.bandwidth.push({
+                        time: Date.now(),
+                        value: Math.round(hlsInstance.bandwidthEstimate / 1000)
+                    });
+                    
+                    if (metrics.bandwidth.length > 50) {
+                        metrics.bandwidth.shift();
+                    }
+                }
+
+                // Collect buffer health
+                if (player && player.buffered && typeof player.buffered === 'function') {
+                    const buffered = player.buffered();
+                    const currentTime = player.currentTime();
+                    let bufferAhead = 0;
+                    
+                    for (let i = 0; i < buffered.length; i++) {
+                        if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+                            bufferAhead = buffered.end(i) - currentTime;
+                            break;
+                        }
+                    }
+
+                    metrics.bufferHealth.push({
+                        time: Date.now(),
+                        value: bufferAhead
+                    });
+
+                    if (metrics.bufferHealth.length > 50) {
+                        metrics.bufferHealth.shift();
+                    }
+                }
+
+                updateMetricsDisplay();
+            } catch (error) {
+                // Silently handle metrics collection errors
+            }
+        }
+
+        function updateMetricsDisplay() {
+            // Overview metrics
+            updateHealthIndicator();
+            
+            // Network metrics
+            const timeElapsed = Math.max(1, (Date.now() - metrics.startTime) / 60000);
+            safeUpdateElement('requestRate', Math.round(metrics.requestCount / timeElapsed));
+            safeUpdateElement('failedRequests', metrics.failedRequests);
+            
+            const avgResponseTime = metrics.responseTimes.length > 0 ? 
+                Math.round(metrics.responseTimes.reduce((a, b) => a + b, 0) / metrics.responseTimes.length) : 0;
+            safeUpdateElement('avgResponseTime', `${avgResponseTime} ms`);
+
+            // Buffer metrics
+            safeUpdateElement('rebufferCount', metrics.rebufferCount);
+            safeUpdateElement('stallDuration', `${Math.round(metrics.stallDuration)}s`);
+
+            // Quality metrics
+            safeUpdateElement('qualitySwitches', metrics.qualitySwitches);
+
+            // Error metrics
+            safeUpdateElement('totalErrors', metrics.errorCount);
+            safeUpdateElement('networkErrors', metrics.networkErrors);
+            safeUpdateElement('mediaErrors', metrics.mediaErrors);
+        }
+
+        function safeUpdateElement(id, value) {
             const element = document.getElementById(id);
             if (element) {
                 element.textContent = value;
             }
         }
 
+        function updateHealthIndicator() {
+            const healthIndicator = document.getElementById('healthIndicator');
+            const healthStatus = document.getElementById('healthStatus');
+            const healthTrend = document.getElementById('healthTrend');
+
+            if (!healthIndicator || !healthStatus || !healthTrend) return;
+
+            let health = 'excellent';
+            let status = 'Excellent';
+            let trend = 'Stable connection';
+
+            if (metrics.errorCount > 5 || metrics.failedRequests > 10) {
+                health = 'poor';
+                status = 'Poor';
+                trend = 'Connection issues detected';
+            } else if (metrics.errorCount > 2 || metrics.rebufferCount > 3) {
+                health = 'good';
+                status = 'Good';
+                trend = 'Minor issues detected';
+            }
+
+            healthIndicator.className = `health-indicator health-${health}`;
+            healthStatus.textContent = status;
+            healthTrend.textContent = trend;
+            healthTrend.className = `metric-trend ${health === 'excellent' ? 'stable' : health === 'good' ? 'up' : 'down'}`;
+        }
+
+        function updateBandwidthMetrics() {
+            if (hlsInstance && hlsInstance.bandwidthEstimate) {
+                const bw = Math.round(hlsInstance.bandwidthEstimate / 1000);
+                safeUpdateElement('bandwidth', `${bw} kbps`);
+                
+                const trend = document.getElementById('bandwidthTrend');
+                if (trend && metrics.bandwidth.length > 1) {
+                    const current = metrics.bandwidth[metrics.bandwidth.length - 1].value;
+                    const previous = metrics.bandwidth[metrics.bandwidth.length - 2].value;
+                    const change = ((current - previous) / previous * 100).toFixed(1);
+                    
+                    if (Math.abs(change) < 5) {
+                        trend.textContent = 'Stable';
+                        trend.className = 'metric-trend stable';
+                    } else if (change > 0) {
+                        trend.textContent = `↑ ${change}%`;
+                        trend.className = 'metric-trend up';
+                    } else {
+                        trend.textContent = `↓ ${Math.abs(change)}%`;
+                        trend.className = 'metric-trend down';
+                    }
+                }
+            }
+        }
+
+        function updateBufferMetrics() {
+            if (!player || !player.buffered || typeof player.buffered !== 'function') return;
+
+            try {
+                const buffered = player.buffered();
+                const currentTime = player.currentTime();
+                let bufferAhead = 0;
+                let totalBufferSize = 0;
+                
+                for (let i = 0; i < buffered.length; i++) {
+                    const start = buffered.start(i);
+                    const end = buffered.end(i);
+                    totalBufferSize += end - start;
+                    
+                    if (currentTime >= start && currentTime <= end) {
+                        bufferAhead = end - currentTime;
+                    }
+                }
+
+                safeUpdateElement('bufferLevel', `${Math.round(bufferAhead)}s`);
+                safeUpdateElement('bufferSize', `${(totalBufferSize * 0.5).toFixed(1)} MB`);
+
+                // Update buffer trend
+                const bufferTrend = document.getElementById('bufferTrend');
+                if (bufferTrend) {
+                    if (bufferAhead > 10) {
+                        bufferTrend.textContent = 'Excellent';
+                        bufferTrend.className = 'metric-trend stable';
+                    } else if (bufferAhead > 5) {
+                        bufferTrend.textContent = 'Good';
+                        bufferTrend.className = 'metric-trend up';
+                    } else {
+                        bufferTrend.textContent = 'Low buffer';
+                        bufferTrend.className = 'metric-trend down';
+                    }
+                }
+            } catch (error) {
+                safeUpdateElement('bufferLevel', '-');
+            }
+        }
+
+        function updateNetworkMetrics() {
+            const cdnPerf = document.getElementById('cdnPerf');
+            if (!cdnPerf) return;
+            
+            const avgResponseTime = metrics.responseTimes.length > 0 ? 
+                Math.round(metrics.responseTimes.reduce((a, b) => a + b, 0) / metrics.responseTimes.length) : 0;
+
+            if (avgResponseTime < 100) {
+                cdnPerf.textContent = 'Excellent';
+            } else if (avgResponseTime < 300) {
+                cdnPerf.textContent = 'Good';
+            } else {
+                cdnPerf.textContent = 'Slow';
+            }
+        }
+
+        function updateGeneralMetrics() {
+            if (!player) return;
+            
+            try {
+                // Update current quality from HLS
+                if (hlsInstance && hlsInstance.currentLevel >= 0 && hlsInstance.levels) {
+                    const level = hlsInstance.levels[hlsInstance.currentLevel];
+                    if (level) {
+                        safeUpdateElement('currentRes', `${level.width}x${level.height}`);
+                        safeUpdateElement('resolution', `${level.width}x${level.height}`);
+                        safeUpdateElement('avgBitrate', `${Math.round(level.bitrate/1000)} kbps`);
+                        
+                        if (level.attrs && level.attrs['FRAME-RATE']) {
+                            safeUpdateElement('frameRate', `${level.attrs['FRAME-RATE']} fps`);
+                        }
+                    }
+                }
+
+                // Try to get dropped frames if available
+                const tech = player.tech();
+                if (tech && tech.el() && tech.el().getVideoPlaybackQuality) {
+                    const quality = tech.el().getVideoPlaybackQuality();
+                    if (quality && quality.droppedVideoFrames !== undefined) {
+                        safeUpdateElement('droppedFrames', quality.droppedVideoFrames);
+                    }
+                }
+            } catch (error) {
+                // Silently handle update errors
+            }
+        }
+
+        function updateQualityDisplay(levelIndex) {
+            if (hlsInstance && hlsInstance.levels && hlsInstance.levels[levelIndex]) {
+                const level = hlsInstance.levels[levelIndex];
+                safeUpdateElement('currentRes', `${level.width}x${level.height}`);
+            }
+        }
+
+        function updateVideoInfo() {
+            // This would be called when video metadata is loaded
+            // to populate initial video information
+        }
+
+        // UI Functions
         function toggleDiagnostics() {
             diagnosticsOpen = !diagnosticsOpen;
             const content = document.getElementById('diagnosticsContent');
@@ -844,18 +1501,47 @@
             }
         }
 
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.metrics-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            const selectedTab = document.getElementById(`${tabName}-tab`);
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+            
+            // Add active class to clicked tab
+            document.querySelectorAll('.metrics-tab').forEach(tab => {
+                if (tab.textContent.toLowerCase().includes(tabName)) {
+                    tab.classList.add('active');
+                }
+            });
+        }
+
         function loadPreset(preset) {
             const presets = {
                 'hls-demo': {
                     url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
                     type: 'hls'
                 },
+                'dash-demo': {
+                    url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.mpd',
+                    type: 'dash'
+                },
                 'apple-demo': {
-                    url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8',
+                    url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8',
                     type: 'hls'
                 },
-                'sintel': {
-                    url: 'https://multiplatform-f.akamaihd.net/i/multi/will/bunny/big_buck_bunny_,640x360_400,640x360_700,640x360_1000,950x540_1500,.f4v.csmil/master.m3u8',
+                'low-latency': {
+                    url: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
                     type: 'hls'
                 }
             };
@@ -868,7 +1554,96 @@
                 if (typeSelect) typeSelect.value = presets[preset].type;
                 
                 logEvent('info', `Loaded ${preset} preset`);
-                showMessage(`Loaded ${preset} preset - click "Load Stream" to play`, 'success');
+            }
+        }
+
+        function exportDiagnostics() {
+            const diagnosticData = {
+                timestamp: new Date().toISOString(),
+                streamUrl: document.getElementById('streamUrl')?.value || '',
+                metrics: metrics,
+                playerInfo: {
+                    version: typeof videojs !== 'undefined' ? videojs.VERSION : 'Unknown',
+                    browser: navigator.userAgent,
+                    hlsSupported: typeof Hls !== 'undefined' && Hls.isSupported(),
+                    dashSupported: typeof dashjs !== 'undefined'
+                },
+                settings: {
+                    autoRecover,
+                    stopOnStall,
+                    metricsEnabled
+                }
+            };
+
+            const dataStr = JSON.stringify(diagnosticData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `dave-video-diagnostics-${Date.now()}.json`;
+            link.click();
+            
+            // Clean up the URL object
+            setTimeout(() => URL.revokeObjectURL(link.href), 100);
+            
+            logEvent('success', 'Diagnostic data exported');
+        }
+
+        function clearAllLogs() {
+            const generalLogs = document.getElementById('generalLogs');
+            const errorLogs = document.getElementById('errorLogs');
+            
+            if (generalLogs) {
+                generalLogs.innerHTML = 
+                    '<div class="log-entry log-info"><span class="log-timestamp">[Cleared]</span> Logs cleared</div>';
+            }
+            
+            if (errorLogs) {
+                errorLogs.innerHTML = 
+                    '<div class="log-entry log-info"><span class="log-timestamp">[Cleared]</span> Error logs cleared</div>';
+            }
+        }
+
+        function logEvent(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logsSection = document.getElementById('generalLogs');
+            
+            if (logsSection) {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry log-${type}`;
+                logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> ${message}`;
+                
+                logsSection.appendChild(logEntry);
+                logsSection.scrollTop = logsSection.scrollHeight;
+                
+                // Keep only last 50 log entries
+                const logEntries = logsSection.getElementsByClassName('log-entry');
+                if (logEntries.length > 50) {
+                    logsSection.removeChild(logEntries[0]);
+                }
+            }
+        }
+
+        function logErrorEvent(type, details) {
+            const timestamp = new Date().toLocaleTimeString();
+            const errorLogs = document.getElementById('errorLogs');
+            
+            if (errorLogs) {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry log-error';
+                logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> ${type}: ${details}`;
+                
+                errorLogs.appendChild(logEntry);
+                errorLogs.scrollTop = errorLogs.scrollHeight;
+                
+                // Update last error display
+                safeUpdateElement('lastError', `${type}: ${details}`);
+                
+                // Keep only last 30 error entries
+                const logEntries = errorLogs.getElementsByClassName('log-entry');
+                if (logEntries.length > 30) {
+                    errorLogs.removeChild(logEntries[0]);
+                }
             }
         }
 
@@ -893,47 +1668,11 @@
             }
         }
 
-        function logEvent(type, message) {
-            const timestamp = new Date().toLocaleTimeString();
-            const logsSection = document.getElementById('generalLogs');
-            
-            if (logsSection) {
-                const logEntry = document.createElement('div');
-                logEntry.className = `log-entry log-${type}`;
-                logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> ${message}`;
-                
-                logsSection.appendChild(logEntry);
-                logsSection.scrollTop = logsSection.scrollHeight;
-                
-                // Keep only last 100 log entries
-                const logEntries = logsSection.getElementsByClassName('log-entry');
-                if (logEntries.length > 100) {
-                    logsSection.removeChild(logEntries[0]);
-                }
-            }
-            
-            // Also log to console for debugging
-            console.log(`[${type.toUpperCase()}] ${message}`);
-        }
-
-        function clearLogs() {
-            const generalLogs = document.getElementById('generalLogs');
-            if (generalLogs) {
-                generalLogs.innerHTML = 
-                    '<div class="log-entry log-info"><span class="log-timestamp">[Cleared]</span> Logs cleared</div>';
-            }
-        }
-
         // Cleanup on page unload
         window.addEventListener('beforeunload', function() {
+            if (statusUpdateInterval) clearInterval(statusUpdateInterval);
             if (metricsInterval) clearInterval(metricsInterval);
-            if (hlsInstance) {
-                try {
-                    hlsInstance.destroy();
-                } catch (e) {
-                    // Ignore cleanup errors
-                }
-            }
+            cleanupInstances();
             if (player) {
                 try {
                     player.dispose();
@@ -941,261 +1680,6 @@
                     // Ignore disposal errors
                 }
             }
-        });
-
-        // Additional debugging
-        window.addEventListener('error', function(e) {
-            logEvent('error', `JavaScript Error: ${e.message} at ${e.filename}:${e.lineno}`);
-        });
-    </script>() {
-            const url = document.getElementById('streamUrl').value.trim();
-            const streamType = document.getElementById('streamType').value;
-            
-            if (!url) {
-                showMessage('Please enter a stream URL', 'error');
-                return;
-            }
-
-            if (!player) {
-                showMessage('Player not ready. Please wait and try again.', 'error');
-                return;
-            }
-
-            clearMessage();
-            logEvent('info', `Loading stream: ${url}`);
-
-            // Clean up existing HLS instance
-            if (hlsInstance) {
-                try {
-                    hlsInstance.destroy();
-                    hlsInstance = null;
-                    logEvent('info', 'Previous HLS instance cleaned up');
-                } catch (e) {
-                    logEvent('info', 'HLS cleanup completed');
-                }
-            }
-
-            // Auto-detect stream type
-            let detectedType = streamType;
-            if (streamType === 'auto') {
-                if (url.includes('.m3u8')) {
-                    detectedType = 'hls';
-                } else if (url.includes('.mpd')) {
-                    detectedType = 'dash';
-                } else {
-                    detectedType = 'hls'; // default assumption
-                }
-            }
-
-            logEvent('info', `Stream type: ${detectedType.toUpperCase()}`);
-
-            if (detectedType === 'hls') {
-                loadHLSStream(url);
-            } else if (detectedType === 'dash') {
-                // For DASH, try direct loading first
-                loadDirectStream(url, 'application/dash+xml');
-            } else {
-                // Try direct loading
-                loadDirectStream(url);
-            }
-        }
-
-        function loadHLSStream(url) {
-            const videoElement = player.tech().el();
-            
-            // Check if browser supports HLS natively (Safari)
-            if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-                logEvent('info', 'Using native HLS support');
-                player.src({
-                    src: url,
-                    type: 'application/vnd.apple.mpegurl'
-                });
-                showMessage('Stream loaded with native HLS support!', 'success');
-                return;
-            }
-            
-            // Use HLS.js for other browsers
-            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                try {
-                    logEvent('info', 'Using HLS.js for stream playback');
-                    
-                    hlsInstance = new Hls({
-                        debug: false,
-                        enableWorker: true
-                    });
-                    
-                    hlsInstance.loadSource(url);
-                    hlsInstance.attachMedia(videoElement);
-                    
-                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
-                        logEvent('success', `HLS manifest parsed - ${data.levels.length} quality levels found`);
-                        showMessage('HLS stream loaded successfully!', 'success');
-                    });
-                    
-                    hlsInstance.on(Hls.Events.ERROR, function(event, data) {
-                        logEvent('error', `HLS Error: ${data.type} - ${data.details}`);
-                        
-                        if (data.fatal) {
-                            showMessage(`Fatal HLS error: ${data.details}`, 'error');
-                            
-                            // Try basic recovery
-                            switch(data.type) {
-                                case Hls.ErrorTypes.NETWORK_ERROR:
-                                    logEvent('info', 'Attempting network error recovery');
-                                    setTimeout(() => {
-                                        if (hlsInstance) {
-                                            hlsInstance.startLoad();
-                                        }
-                                    }, 1000);
-                                    break;
-                                case Hls.ErrorTypes.MEDIA_ERROR:
-                                    logEvent('info', 'Attempting media error recovery');
-                                    setTimeout(() => {
-                                        if (hlsInstance) {
-                                            hlsInstance.recoverMediaError();
-                                        }
-                                    }, 1000);
-                                    break;
-                                default:
-                                    logEvent('error', 'Cannot recover from this error type');
-                                    break;
-                            }
-                        }
-                    });
-
-                    logEvent('success', 'HLS.js instance created and attached');
-                } catch (error) {
-                    logEvent('error', `HLS.js initialization failed: ${error.message}`);
-                    showMessage(`HLS.js failed: ${error.message}`, 'error');
-                    
-                    // Fallback to direct loading
-                    loadDirectStream(url, 'application/vnd.apple.mpegurl');
-                }
-            } else {
-                logEvent('warning', 'HLS.js not available, trying direct loading');
-                loadDirectStream(url, 'application/vnd.apple.mpegurl');
-            }
-        }
-
-        function loadDirectStream(url, mimeType = null) {
-            try {
-                logEvent('info', 'Attempting direct stream loading');
-                
-                const sourceObj = { src: url };
-                if (mimeType) {
-                    sourceObj.type = mimeType;
-                }
-                
-                player.src(sourceObj);
-                showMessage('Stream loaded directly!', 'success');
-                
-            } catch (error) {
-                logEvent('error', `Direct loading failed: ${error.message}`);
-                showMessage(`Direct loading failed: ${error.message}`, 'error');
-            }
-        }
-
-        function loadPreset(preset) {
-            const presets = {
-                'hls-demo': {
-                    url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
-                    type: 'hls'
-                },
-                'apple-demo': {
-                    url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8',
-                    type: 'hls'
-                },
-                'sintel': {
-                    url: 'https://multiplatform-f.akamaihd.net/i/multi/will/bunny/big_buck_bunny_,640x360_400,640x360_700,640x360_1000,950x540_1500,.f4v.csmil/master.m3u8',
-                    type: 'hls'
-                }
-            };
-
-            if (presets[preset]) {
-                const urlInput = document.getElementById('streamUrl');
-                const typeSelect = document.getElementById('streamType');
-                
-                if (urlInput) urlInput.value = presets[preset].url;
-                if (typeSelect) typeSelect.value = presets[preset].type;
-                
-                logEvent('info', `Loaded ${preset} preset`);
-                showMessage(`Loaded ${preset} preset - click "Load Stream" to play`, 'success');
-            }
-        }
-
-        function showMessage(message, type) {
-            const messageArea = document.getElementById('messageArea');
-            if (messageArea) {
-                messageArea.innerHTML = `<div class="${type}-message">${message}</div>`;
-                
-                // Auto-clear success messages after 5 seconds
-                if (type === 'success') {
-                    setTimeout(() => {
-                        clearMessage();
-                    }, 5000);
-                }
-            }
-        }
-
-        function clearMessage() {
-            const messageArea = document.getElementById('messageArea');
-            if (messageArea) {
-                messageArea.innerHTML = '';
-            }
-        }
-
-        function logEvent(type, message) {
-            const timestamp = new Date().toLocaleTimeString();
-            const logsSection = document.getElementById('generalLogs');
-            
-            if (logsSection) {
-                const logEntry = document.createElement('div');
-                logEntry.className = `log-entry log-${type}`;
-                logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> ${message}`;
-                
-                logsSection.appendChild(logEntry);
-                logsSection.scrollTop = logsSection.scrollHeight;
-                
-                // Keep only last 100 log entries
-                const logEntries = logsSection.getElementsByClassName('log-entry');
-                if (logEntries.length > 100) {
-                    logsSection.removeChild(logEntries[0]);
-                }
-            }
-            
-            // Also log to console for debugging
-            console.log(`[${type.toUpperCase()}] ${message}`);
-        }
-
-        function clearLogs() {
-            const generalLogs = document.getElementById('generalLogs');
-            if (generalLogs) {
-                generalLogs.innerHTML = 
-                    '<div class="log-entry log-info"><span class="log-timestamp">[Cleared]</span> Logs cleared</div>';
-            }
-        }
-
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', function() {
-            if (hlsInstance) {
-                try {
-                    hlsInstance.destroy();
-                } catch (e) {
-                    // Ignore cleanup errors
-                }
-            }
-            if (player) {
-                try {
-                    player.dispose();
-                } catch (e) {
-                    // Ignore disposal errors
-                }
-            }
-        });
-
-        // Additional debugging
-        window.addEventListener('error', function(e) {
-            logEvent('error', `JavaScript Error: ${e.message} at ${e.filename}:${e.lineno}`);
         });
     </script>
 </body>
