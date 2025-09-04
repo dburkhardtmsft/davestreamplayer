@@ -1517,16 +1517,53 @@
             const cdnPerf = document.getElementById('cdnPerf');
             if (!cdnPerf) return;
             
+            // Calculate average response time
             const avgResponseTime = metrics.responseTimes.length > 0 ? 
                 Math.round(metrics.responseTimes.reduce((a, b) => a + b, 0) / metrics.responseTimes.length) : 0;
 
-            if (avgResponseTime < 100) {
-                cdnPerf.textContent = 'Excellent';
-            } else if (avgResponseTime < 300) {
-                cdnPerf.textContent = 'Good';
-            } else {
-                cdnPerf.textContent = 'Slow';
+            // Calculate success rate
+            const successRate = metrics.requestCount > 0 ? 
+                ((metrics.requestCount - metrics.failedRequests) / metrics.requestCount) * 100 : 100;
+
+            // Calculate response time variance (jitter)
+            let jitter = 0;
+            if (metrics.responseTimes.length > 1) {
+                const mean = avgResponseTime;
+                const variance = metrics.responseTimes.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / metrics.responseTimes.length;
+                jitter = Math.sqrt(variance);
             }
+
+            let rating = 'Excellent';
+            let performanceIssues = [];
+
+            // Response time check for video segments
+            if (avgResponseTime >= 500) {
+                rating = 'Slow';
+                performanceIssues.push('High latency');
+            } else if (avgResponseTime >= 250) {
+                rating = 'Good';
+            }
+
+            // Success rate check
+            if (successRate < 95) {
+                rating = 'Slow';
+                performanceIssues.push('High failure rate');
+            } else if (successRate < 98) {
+                rating = Math.min(rating === 'Excellent' ? 'Good' : rating);
+            }
+
+            // Jitter check (connection stability)
+            if (jitter > 200) {
+                rating = 'Slow';
+                performanceIssues.push('Unstable connection');
+            } else if (jitter > 100) {
+                rating = Math.min(rating === 'Excellent' ? 'Good' : rating);
+            }
+
+            cdnPerf.textContent = rating;
+            
+            // Update tooltip with detailed info
+            cdnPerf.title = `Avg Response: ${avgResponseTime}ms\nSuccess Rate: ${successRate.toFixed(1)}%\nJitter: ${jitter.toFixed(1)}ms${performanceIssues.length ? '\nIssues: ' + performanceIssues.join(', ') : ''}`;
         }
 
         function updateGeneralMetrics() {
