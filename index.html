@@ -569,14 +569,6 @@
                             <option value="dash">DASH (.mpd)</option>
                         </select>
                     </div>
-                    <div class="input-field">
-                        <label for="authToken">Authorization Token (Optional)</label>
-                        <input type="password" id="authToken" placeholder="Bearer token for protected streams" />
-                    </div>
-                    <div class="input-field">
-                        <label for="streamId">Stream ID (Optional)</label>
-                        <input type="text" id="streamId" placeholder="Stream ID for protected streams" value="afa7a2ee-9409-4cbb-bac7-8ff3f79d16da" />
-                    </div>
                 </div>
 
                 <div class="controls-row">
@@ -1095,25 +1087,14 @@
                     }
                     
                     hlsInstance = new Hls({
-                        debug: true, // Enable debug to see key loading issues
+                        debug: false,
                         enableWorker: true,
                         lowLatencyMode: true,
                         backBufferLength: 90,
                         maxBufferLength: 30,
                         startLevel: -1,
                         autoStartLoad: true,
-                        capLevelToPlayerSize: true,
-                        xhrSetup: function(xhr, url) {
-                            // Add authorization headers for key requests
-                            if (url.includes('.key') || url.includes('/keys/')) {
-                                // You'll need to get a valid token from Teams/Office 365
-                                xhr.setRequestHeader('Authorization', 'Bearer ' + document.getElementById('authToken')?.value);
-                                
-                                // Add other required headers
-                                xhr.setRequestHeader('X-Stream-Id', document.getElementById('streamId')?.value);
-                                xhr.withCredentials = true;
-                            }
-                        }
+                        capLevelToPlayerSize: true
                     });
                     
                     hlsInstance.loadSource(url);
