@@ -317,6 +317,17 @@
     <script>
         let player;
         let hlsInstance;
+        let diagnosticsOpen = false;
+        let metricsInterval;
+        let currentLevels = [];
+        
+        // Metrics tracking
+        let metrics = {
+            qualitySwitches: 0,
+            startTime: null,
+            bandwidth: [],
+            bufferHealth: []
+        };
         
         // Wait for DOM and scripts to load
         document.addEventListener('DOMContentLoaded', function() {
@@ -352,6 +363,7 @@
                 player.ready(() => {
                     logEvent('success', 'Video.js player ready!');
                     setupBasicEvents();
+                    startMetricsCollection();
                     showMessage('Player initialized successfully!', 'success');
                 });
 
@@ -366,6 +378,7 @@
 
             player.on('loadstart', () => {
                 logEvent('info', 'Stream loading started');
+                metrics.startTime = Date.now();
             });
             
             player.on('loadeddata', () => {
@@ -384,6 +397,10 @@
                 logEvent('info', 'Playback paused');
             });
             
+            player.on('timeupdate', () => {
+                updatePlaybackTime();
+            });
+            
             player.on('error', (e) => {
                 const error = player.error();
                 const errorMsg = error ? `${error.code}: ${error.message}` : 'Unknown error';
@@ -393,6 +410,544 @@
         }
 
         function loadStream() {
+            const url = document.getElementById('streamUrl').value.trim();
+            const streamType = document.getElementById('streamType').value;
+            
+            if (!url) {
+                showMessage('Please enter a stream URL', 'error');
+                return;
+            }
+
+            if (!player) {
+                showMessage('Player not ready. Please wait and try again.', 'error');
+                return;
+            }
+
+            clearMessage();
+            logEvent('info', `Loading stream: ${url}`);
+            resetMetrics();
+
+            // Clean up existing HLS instance
+            if (hlsInstance) {
+                try {
+                    hlsInstance.destroy();
+                    hlsInstance = null;
+                    logEvent('info', 'Previous HLS instance cleaned up');
+                } catch (e) {
+                    logEvent('info', 'HLS cleanup completed');
+                }
+            }
+
+            // Hide quality controls until we know what's available
+            document.getElementById('qualityControls').style.display = 'none';
+            currentLevels = [];
+
+            // Auto-detect stream type
+            let detectedType = streamType;
+            if (streamType === 'auto') {
+                if (url.includes('.m3u8')) {
+                    detectedType = 'hls';
+                } else if (url.includes('.mpd')) {
+                    detectedType = 'dash';
+                } else {
+                    detectedType = 'hls'; // default assumption
+                }
+            }
+
+            logEvent('info', `Stream type: ${detectedType.toUpperCase()}`);
+            updateElement('streamType', detectedType.toUpperCase());
+            updateElement('streamInfo', 'Loading...');
+
+            if (detectedType === 'hls') {
+                loadHLSStream(url);
+            } else if (detectedType === 'dash') {
+                // For DASH, try direct loading first
+                loadDirectStream(url, 'application/dash+xml');
+            } else {
+                // Try direct loading
+                loadDirectStream(url);
+            }
+        }() {
+            const url = document.getElementById('streamUrl').value.trim();
+            const streamType = document.getElementById('streamType').value;
+            
+            if (!url) {
+                showMessage('Please enter a stream URL', 'error');
+                return;
+            }
+
+            if (!player) {
+                showMessage('Player not ready. Please wait and try again.', 'error');
+                return;
+            }
+
+            clearMessage();
+            logEvent('info', `Loading stream: ${url}`);
+            resetMetrics();
+
+            // Clean up existing HLS instance
+            if (hlsInstance) {
+                try {
+                    hlsInstance.destroy();
+                    hlsInstance = null;
+                    logEvent('info', 'Previous HLS instance cleaned up');
+                } catch (e) {
+                    logEvent('info', 'HLS cleanup completed');
+                }
+            }
+
+            // Hide quality controls until we know what's available
+            document.getElementById('qualityControls').style.display = 'none';
+            currentLevels = [];
+
+            // Auto-detect stream type
+            let detectedType = streamType;
+            if (streamType === 'auto') {
+                if (url.includes('.m3u8')) {
+                    detectedType = 'hls';
+                } else if (url.includes('.mpd')) {
+                    detectedType = 'dash';
+                } else {
+                    detectedType = 'hls'; // default assumption
+                }
+            }
+
+            logEvent('info', `Stream type: ${detectedType.toUpperCase()}`);
+            updateElement('streamType', detectedType.toUpperCase());
+            updateElement('streamInfo', 'Loading...');
+
+            if (detectedType === 'hls') {
+                loadHLSStream(url);
+            } else if (detectedType === 'dash') {
+                // For DASH, try direct loading first
+                loadDirectStream(url, 'application/dash+xml');
+            } else {
+                // Try direct loading
+                loadDirectStream(url);
+            }
+        }
+
+        function loadHLSStream(url) {
+            const videoElement = player.tech().el();
+            
+            // Check if browser supports HLS natively (Safari)
+            if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                logEvent('info', 'Using native HLS support');
+                updateElement('streamInfo', 'Native HLS');
+                player.src({
+                    src: url,
+                    type: 'application/vnd.apple.mpegurl'
+                });
+                showMessage('Stream loaded with native HLS support!', 'success');
+                return;
+            }
+            
+            // Use HLS.js for other browsers
+            if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                try {
+                    logEvent('info', 'Using HLS.js for stream playback');
+                    updateElement('streamInfo', 'HLS.js');
+                    
+                    hlsInstance = new Hls({
+                        debug: false,
+                        enableWorker: true
+                    });
+                    
+                    hlsInstance.loadSource(url);
+                    hlsInstance.attachMedia(videoElement);
+                    
+                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                        logEvent('success', `HLS manifest parsed - ${data.levels.length} quality levels found`);
+                        currentLevels = data.levels;
+                        populateQualityLevels(data.levels);
+                        showMessage('HLS stream loaded successfully!', 'success');
+                        updateElement('streamInfo', `${data.levels.length} levels`);
+                    });
+                    
+                    hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+                        metrics.qualitySwitches++;
+                        logEvent('info', `Quality switched to level ${data.level}`);
+                        updateQualityDisplay(data.level);
+                        updateElement('qualitySwitches', metrics.qualitySwitches);
+                    });
+
+                    hlsInstance.on(Hls.Events.FRAG_LOADED, function(event, data) {
+                        // Update bandwidth info when fragments load
+                        if (hlsInstance.bandwidthEstimate) {
+                            const bw = Math.round(hlsInstance.bandwidthEstimate / 1000);
+                            updateElement('bandwidth', `${bw} kbps`);
+                            
+                            // Store bandwidth data for trend analysis
+                            metrics.bandwidth.push({
+                                time: Date.now(),
+                                value: bw
+                            });
+                            
+                            // Keep only last 10 readings
+                            if (metrics.bandwidth.length > 10) {
+                                metrics.bandwidth.shift();
+                            }
+                            
+                            updateBandwidthTrend();
+                        }
+                    });
+                    
+                    hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+                        logEvent('error', `HLS Error: ${data.type} - ${data.details}`);
+                        
+                        if (data.fatal) {
+                            showMessage(`Fatal HLS error: ${data.details}`, 'error');
+                            
+                            // Try basic recovery
+                            switch(data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    logEvent('info', 'Attempting network error recovery');
+                                    setTimeout(() => {
+                                        if (hlsInstance) {
+                                            hlsInstance.startLoad();
+                                        }
+                                    }, 1000);
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    logEvent('info', 'Attempting media error recovery');
+                                    setTimeout(() => {
+                                        if (hlsInstance) {
+                                            hlsInstance.recoverMediaError();
+                                        }
+                                    }, 1000);
+                                    break;
+                                default:
+                                    logEvent('error', 'Cannot recover from this error type');
+                                    break;
+                            }
+                        }
+                    });
+
+                    logEvent('success', 'HLS.js instance created and attached');
+                } catch (error) {
+                    logEvent('error', `HLS.js initialization failed: ${error.message}`);
+                    showMessage(`HLS.js failed: ${error.message}`, 'error');
+                    
+                    // Fallback to direct loading
+                    loadDirectStream(url, 'application/vnd.apple.mpegurl');
+                }
+            } else {
+                logEvent('warning', 'HLS.js not available, trying direct loading');
+                loadDirectStream(url, 'application/vnd.apple.mpegurl');
+            }
+        }
+
+        function loadDirectStream(url, mimeType = null) {
+            try {
+                logEvent('info', 'Attempting direct stream loading');
+                updateElement('streamInfo', 'Direct');
+                
+                const sourceObj = { src: url };
+                if (mimeType) {
+                    sourceObj.type = mimeType;
+                }
+                
+                player.src(sourceObj);
+                showMessage('Stream loaded directly!', 'success');
+                
+            } catch (error) {
+                logEvent('error', `Direct loading failed: ${error.message}`);
+                showMessage(`Direct loading failed: ${error.message}`, 'error');
+            }
+        }
+
+        function populateQualityLevels(levels) {
+            const container = document.getElementById('qualityLevels');
+            const controls = document.getElementById('qualityControls');
+            
+            if (!container || !controls) return;
+            
+            // Clear existing buttons
+            container.innerHTML = '';
+            
+            // Add Auto button
+            const autoBtn = document.createElement('button');
+            autoBtn.className = 'quality-btn active';
+            autoBtn.textContent = 'Auto';
+            autoBtn.onclick = () => setQualityLevel(-1);
+            container.appendChild(autoBtn);
+            
+            // Add quality level buttons
+            levels.forEach((level, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'quality-btn';
+                btn.textContent = `${level.height}p`;
+                btn.onclick = () => setQualityLevel(index);
+                container.appendChild(btn);
+            });
+            
+            // Show quality controls
+            controls.style.display = 'block';
+            logEvent('info', `Quality controls populated with ${levels.length} levels`);
+        }
+
+        function setQualityLevel(level) {
+            if (!hlsInstance) {
+                logEvent('warning', 'Cannot change quality - HLS instance not available');
+                return;
+            }
+            
+            hlsInstance.currentLevel = level;
+            logEvent('info', `Manual quality level set to: ${level === -1 ? 'Auto' : level}`);
+            
+            // Update button states
+            document.querySelectorAll('.quality-btn').forEach(btn => btn.classList.remove('active'));
+            const buttons = document.querySelectorAll('.quality-btn');
+            if (level === -1 && buttons[0]) {
+                buttons[0].classList.add('active');
+            } else if (buttons[level + 1]) {
+                buttons[level + 1].classList.add('active');
+            }
+        }
+
+        function updateQualityDisplay(levelIndex) {
+            if (currentLevels && currentLevels[levelIndex]) {
+                const level = currentLevels[levelIndex];
+                updateElement('currentRes', `${level.width}x${level.height}`);
+                updateElement('qualityTrend', `${Math.round(level.bitrate/1000)} kbps`);
+            }
+        }
+
+        function startMetricsCollection() {
+            if (metricsInterval) clearInterval(metricsInterval);
+            
+            metricsInterval = setInterval(() => {
+                if (player) {
+                    updateBufferMetrics();
+                }
+            }, 1000);
+        }
+
+        function updateBufferMetrics() {
+            if (!player || typeof player.buffered !== 'function') return;
+
+            try {
+                const buffered = player.buffered();
+                const currentTime = player.currentTime();
+                let bufferAhead = 0;
+                
+                for (let i = 0; i < buffered.length; i++) {
+                    const start = buffered.start(i);
+                    const end = buffered.end(i);
+                    
+                    if (currentTime >= start && currentTime <= end) {
+                        bufferAhead = end - currentTime;
+                        break;
+                    }
+                }
+
+                updateElement('bufferLevel', `${Math.round(bufferAhead)}s`);
+
+                // Update buffer trend
+                let bufferStatus = 'Optimal';
+                if (bufferAhead < 3) {
+                    bufferStatus = 'Low';
+                } else if (bufferAhead > 15) {
+                    bufferStatus = 'High';
+                }
+                updateElement('bufferTrend', bufferStatus);
+                
+                // Store buffer data
+                metrics.bufferHealth.push({
+                    time: Date.now(),
+                    value: bufferAhead
+                });
+                
+                // Keep only last 10 readings
+                if (metrics.bufferHealth.length > 10) {
+                    metrics.bufferHealth.shift();
+                }
+
+            } catch (error) {
+                updateElement('bufferLevel', '-');
+            }
+        }
+
+        function updateBandwidthTrend() {
+            if (metrics.bandwidth.length < 2) return;
+            
+            const current = metrics.bandwidth[metrics.bandwidth.length - 1].value;
+            const previous = metrics.bandwidth[metrics.bandwidth.length - 2].value;
+            const change = current - previous;
+            
+            let trend = 'Stable';
+            if (Math.abs(change) > current * 0.1) { // 10% change threshold
+                trend = change > 0 ? 'Increasing' : 'Decreasing';
+            }
+            
+            updateElement('bandwidthTrend', trend);
+        }
+
+        function updatePlaybackTime() {
+            if (!player) return;
+            
+            const currentTime = player.currentTime();
+            const duration = player.duration();
+            
+            if (currentTime && !isNaN(currentTime)) {
+                updateElement('playbackTime', formatTime(currentTime));
+            }
+            
+            if (duration && !isNaN(duration)) {
+                updateElement('durationInfo', `/ ${formatTime(duration)}`);
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function resetMetrics() {
+            metrics = {
+                qualitySwitches: 0,
+                startTime: Date.now(),
+                bandwidth: [],
+                bufferHealth: []
+            };
+            
+            // Reset UI
+            updateElement('qualitySwitches', '0');
+            updateElement('bandwidth', '- kbps');
+            updateElement('bufferLevel', '- seconds');
+            updateElement('currentRes', '-');
+            updateElement('playbackTime', '00:00');
+            updateElement('durationInfo', '/ 00:00');
+        }
+
+        function updateElement(id, value) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value;
+            }
+        }
+
+        function toggleDiagnostics() {
+            diagnosticsOpen = !diagnosticsOpen;
+            const content = document.getElementById('diagnosticsContent');
+            const arrow = document.getElementById('diagnosticsArrow');
+            
+            if (content && arrow) {
+                if (diagnosticsOpen) {
+                    content.classList.add('open');
+                    arrow.textContent = '▲';
+                } else {
+                    content.classList.remove('open');
+                    arrow.textContent = '▼';
+                }
+            }
+        }
+
+        function loadPreset(preset) {
+            const presets = {
+                'hls-demo': {
+                    url: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+                    type: 'hls'
+                },
+                'apple-demo': {
+                    url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8',
+                    type: 'hls'
+                },
+                'sintel': {
+                    url: 'https://multiplatform-f.akamaihd.net/i/multi/will/bunny/big_buck_bunny_,640x360_400,640x360_700,640x360_1000,950x540_1500,.f4v.csmil/master.m3u8',
+                    type: 'hls'
+                }
+            };
+
+            if (presets[preset]) {
+                const urlInput = document.getElementById('streamUrl');
+                const typeSelect = document.getElementById('streamType');
+                
+                if (urlInput) urlInput.value = presets[preset].url;
+                if (typeSelect) typeSelect.value = presets[preset].type;
+                
+                logEvent('info', `Loaded ${preset} preset`);
+                showMessage(`Loaded ${preset} preset - click "Load Stream" to play`, 'success');
+            }
+        }
+
+        function showMessage(message, type) {
+            const messageArea = document.getElementById('messageArea');
+            if (messageArea) {
+                messageArea.innerHTML = `<div class="${type}-message">${message}</div>`;
+                
+                // Auto-clear success messages after 5 seconds
+                if (type === 'success') {
+                    setTimeout(() => {
+                        clearMessage();
+                    }, 5000);
+                }
+            }
+        }
+
+        function clearMessage() {
+            const messageArea = document.getElementById('messageArea');
+            if (messageArea) {
+                messageArea.innerHTML = '';
+            }
+        }
+
+        function logEvent(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logsSection = document.getElementById('generalLogs');
+            
+            if (logsSection) {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry log-${type}`;
+                logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> ${message}`;
+                
+                logsSection.appendChild(logEntry);
+                logsSection.scrollTop = logsSection.scrollHeight;
+                
+                // Keep only last 100 log entries
+                const logEntries = logsSection.getElementsByClassName('log-entry');
+                if (logEntries.length > 100) {
+                    logsSection.removeChild(logEntries[0]);
+                }
+            }
+            
+            // Also log to console for debugging
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function clearLogs() {
+            const generalLogs = document.getElementById('generalLogs');
+            if (generalLogs) {
+                generalLogs.innerHTML = 
+                    '<div class="log-entry log-info"><span class="log-timestamp">[Cleared]</span> Logs cleared</div>';
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (metricsInterval) clearInterval(metricsInterval);
+            if (hlsInstance) {
+                try {
+                    hlsInstance.destroy();
+                } catch (e) {
+                    // Ignore cleanup errors
+                }
+            }
+            if (player) {
+                try {
+                    player.dispose();
+                } catch (e) {
+                    // Ignore disposal errors
+                }
+            }
+        });
+
+        // Additional debugging
+        window.addEventListener('error', function(e) {
+            logEvent('error', `JavaScript Error: ${e.message} at ${e.filename}:${e.lineno}`);
+        });
+    </script>() {
             const url = document.getElementById('streamUrl').value.trim();
             const streamType = document.getElementById('streamType').value;
             
